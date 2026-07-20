@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "rrweb": "^2.1.0"
+    "rrweb": "^2.1.0",
+    "@markerio-usa/core": "*"
   }
 }

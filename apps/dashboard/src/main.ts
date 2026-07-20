@@ -1,5 +1,6 @@
 import { Api, type LogEntry, type NetworkEntry, type Submission } from './api.js';
 import { ReplayPlayer, formatDuration } from './replay.js';
+import { renderStudyResults, type StudyResults } from './studies.js';
 import {
   card,
   emptyState,
@@ -28,14 +29,26 @@ const dom = {
   detail: byId<HTMLElement>('detail'),
 };
 
-type Filter = 'all' | 'bug' | 'feedback' | 'research';
+type Filter = 'all' | 'bug' | 'feedback' | 'research' | 'studies';
+
+interface StudySummary {
+  id: string;
+  name: string;
+  active: boolean;
+  questions: unknown[];
+}
 
 let all: Submission[] = [];
 let visible: Submission[] = [];
+let studies: StudySummary[] = [];
 let selectedId: string | undefined;
+let selectedStudyId: string | undefined;
 let filter: Filter = 'all';
 let query = '';
 let player: ReplayPlayer | undefined;
+
+/** Studies aggregate responses; every other filter lists individual submissions. */
+const isStudiesMode = (): boolean => filter === 'studies';
 
 function byId<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -49,7 +62,24 @@ async function load(): Promise<void> {
   dom.list.replaceChildren(listSkeleton());
 
   try {
-    all = await api.listSubmissions();
+    // Both are needed regardless of mode: the Studies chip shows a count even
+    // while viewing submissions.
+    const [submissions, studyList] = await Promise.all([
+      api.listSubmissions(),
+      api.listStudies().catch(() => [] as StudySummary[]),
+    ]);
+    all = submissions;
+    studies = studyList as StudySummary[];
+
+    if (isStudiesMode()) {
+      renderCounts();
+      renderStudyList();
+      const target = selectedStudyId ?? studies[0]?.id;
+      if (target) await selectStudy(target);
+      else renderDetailPlaceholder();
+      return;
+    }
+
     applyFilters();
 
     // Preserve selection across a refresh when the row still exists.
@@ -103,7 +133,14 @@ function applyFilters(): void {
 }
 
 function renderCounts(): void {
-  const counts: Record<Filter, number> = { all: 0, bug: 0, feedback: 0, research: 0 };
+  // `studies` is counted from the study list, not from submissions, so it is
+  // filled in separately below.
+  const counts: Record<Exclude<Filter, 'studies'>, number> = {
+    all: 0,
+    bug: 0,
+    feedback: 0,
+    research: 0,
+  };
 
   for (const submission of all) {
     if (!matchesQuery(submission)) continue;
@@ -116,6 +153,74 @@ function renderCounts(): void {
   for (const [key, value] of Object.entries(counts)) {
     const node = dom.filters.querySelector(`[data-count="${key}"]`);
     if (node) node.textContent = String(value);
+  }
+
+  const studiesCount = dom.filters.querySelector('[data-count="studies"]');
+  if (studiesCount) studiesCount.textContent = String(studies.length);
+}
+
+// --- studies mode -----------------------------------------------------------
+
+function renderStudyList(): void {
+  if (studies.length === 0) {
+    dom.list.replaceChildren(
+      emptyState('No studies', 'Create one with PUT /v1/studies/:id and it will appear here.'),
+    );
+    return;
+  }
+
+  const rows = studies
+    .filter((study) => !query || study.name.toLowerCase().includes(query) || study.id.toLowerCase().includes(query))
+    .map((study) => {
+      const row = h(
+        'button',
+        {
+          class: study.id === selectedStudyId ? 'row is-selected' : 'row',
+          'data-study-id': study.id,
+          type: 'button',
+          role: 'listitem',
+        },
+        [
+          h('div', { class: 'row__head' }, [
+            h('span', { class: 'row__dot row__dot--research' }),
+            h('span', { class: 'row__title', text: study.name || study.id }),
+          ]),
+          h('div', { class: 'row__meta' }, [
+            h('span', { class: 'tag', text: `${study.questions.length} questions` }),
+            h('span', { class: 'tag', text: study.active ? 'active' : 'paused' }),
+          ]),
+        ],
+      );
+      row.addEventListener('click', () => void selectStudy(study.id));
+      return row;
+    });
+
+  dom.list.replaceChildren(...rows);
+}
+
+async function selectStudy(studyId: string): Promise<void> {
+  selectedStudyId = studyId;
+
+  for (const row of dom.list.querySelectorAll<HTMLElement>('.row')) {
+    row.classList.toggle('is-selected', row.dataset.studyId === studyId);
+  }
+
+  player?.destroy();
+  player = undefined;
+
+  try {
+    const { study, results } = await api.getStudyResults(studyId);
+    dom.detail.replaceChildren(
+      renderStudyResults(study as Parameters<typeof renderStudyResults>[0], results as StudyResults),
+    );
+    dom.detail.scrollTop = 0;
+  } catch (err) {
+    dom.detail.replaceChildren(
+      emptyState('Could not load results', err instanceof Error ? err.message : 'Request failed', {
+        iconPath: icons.alert,
+        variant: 'error',
+      }),
+    );
   }
 }
 
@@ -538,7 +643,8 @@ dom.search.addEventListener('input', () => {
   if (searchTimer) clearTimeout(searchTimer);
   searchTimer = setTimeout(() => {
     query = dom.search.value.trim().toLowerCase();
-    applyFilters();
+    if (isStudiesMode()) renderStudyList();
+    else applyFilters();
   }, 120);
 });
 
@@ -550,7 +656,19 @@ dom.filters.addEventListener('click', (event) => {
   for (const chip of dom.filters.querySelectorAll('.chip')) {
     chip.classList.toggle('is-active', chip === button);
   }
-  applyFilters();
+
+  // Studies aggregate; every other chip lists submissions. Switching modes
+  // re-renders both panes rather than filtering the current list.
+  if (isStudiesMode()) {
+    renderStudyList();
+    const target = selectedStudyId ?? studies[0]?.id;
+    if (target) void selectStudy(target);
+    else renderDetailPlaceholder();
+  } else {
+    applyFilters();
+    if (visible.length > 0) select(visible[0]!.id);
+    else renderDetailPlaceholder();
+  }
 });
 
 // Keyboard navigation: j/k and arrows move through the inbox, / focuses search.

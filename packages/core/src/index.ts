@@ -26,6 +26,26 @@ export type { ConsentRecord, ConsentScope } from './consent.js';
 export { IngestClient, IngestError } from './client.js';
 export type { IngestClientOptions } from './client.js';
 
+export {
+  MAX_TEXT_ANSWER,
+  countChoices,
+  isAnswered,
+  mean,
+  npsBreakdown,
+  toAnswers,
+  validateStudy,
+} from './study.js';
+export type {
+  ChoiceQuestion,
+  NpsBreakdown,
+  NpsQuestion,
+  Question,
+  QuestionType,
+  RatingQuestion,
+  Study,
+  TextQuestion,
+} from './study.js';
+
 export { ReportQueue } from './queue.js';
 export { ReportBuilder } from './session.js';
 export type { BuildContext, CaptureDraft } from './session.js';

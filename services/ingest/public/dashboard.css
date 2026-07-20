@@ -278,10 +278,11 @@ body {
 
 .filters {
   display: flex; gap: 6px;
+  /* Wrap rather than scroll: a horizontally scrolling chip row auto-scrolls to
+     the active chip and clips the ones before it, hiding "All" from view. */
+  flex-wrap: wrap;
   padding: var(--s-3);
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 .filters::-webkit-scrollbar { display: none; }
 
@@ -633,3 +634,49 @@ body {
   .spec__v { padding-bottom: var(--s-3); border-bottom: 1px solid var(--border); }
   .btn span { display: none; }
 }
+
+/* =========================================================================
+   Study results
+   ========================================================================= */
+
+.chip--mode { margin-left: 4px; border-style: dashed; }
+.chip--mode.is-active { border-style: solid; }
+
+.score { display: flex; align-items: baseline; gap: 8px; margin-bottom: var(--s-4); }
+.score__value {
+  font-size: 34px; font-weight: 650; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.score__label { font-size: var(--t-md); color: var(--text-3); }
+
+/* Stacked proportion bar — NPS promoter/passive/detractor split. */
+.segbar {
+  display: flex; height: 10px; border-radius: 99px;
+  overflow: hidden; background: var(--surface-sunk);
+}
+.segbar__seg { height: 100%; }
+.seg--good { background: var(--success); }
+.seg--neutral { background: var(--text-4); }
+.seg--bad { background: var(--danger); }
+
+.legend { display: flex; gap: var(--s-4); flex-wrap: wrap; margin-top: var(--s-3); }
+.legend__item { display: flex; align-items: center; gap: 6px; font-size: var(--t-md); color: var(--text-2); }
+.legend__dot { width: 8px; height: 8px; border-radius: 99px; }
+
+.bars { display: flex; flex-direction: column; gap: 9px; }
+.bar { display: grid; grid-template-columns: minmax(70px, 190px) 1fr auto; gap: var(--s-3); align-items: center; }
+.bar__label { font-size: var(--t-md); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar__track { height: 8px; background: var(--surface-sunk); border-radius: 99px; overflow: hidden; }
+.bar__fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width .3s cubic-bezier(.16,1,.3,1); }
+.bar__value { font-size: var(--t-sm); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.verbatims { display: flex; flex-direction: column; }
+.verbatim {
+  margin: 0; padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid var(--accent-border);
+  font-size: var(--t-lg); color: var(--text-2); line-height: 1.6;
+}
+.verbatim:last-child { border-bottom: 0; }
+
+.muted { color: var(--text-3); }

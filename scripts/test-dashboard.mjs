@@ -74,7 +74,8 @@ try {
   check('clearing the filter restores the list', (await titles()).length >= 3);
 
   console.log('\nSearch');
-  await page.type('#search', 'checkout');
+  // 'checkout' also matches study ids; use a phrase only the report carries.
+  await page.type('#search', 'second attempt');
   await pause(350);
   rows = await titles();
   check('search narrows to matches', rows.length === 1 && rows[0].includes('Checkout'), rows.join(' | '));

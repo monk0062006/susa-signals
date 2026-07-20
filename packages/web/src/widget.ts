@@ -7,12 +7,14 @@ import {
   type BuildContext,
   type ConsentRecord,
   type Reporter,
+  type Study,
   type Submission,
 } from '@markerio-usa/core';
 import { WebPlatformAdapter } from './adapter.js';
 import { WebInstrumentation } from './instrument.js';
 import { AnnotationOverlay } from './overlay.js';
 import { ReplayRecorder, type ReplayOptions } from './replay.js';
+import { SurveyRunner } from './survey.js';
 
 /** Bump when consent copy changes materially; prior grants stop counting. */
 const CONSENT_POLICY_VERSION = '1';
@@ -55,6 +57,16 @@ export interface Widget {
   /** Starts replay if consent allows. Returns the session id, or undefined. */
   startRecording(): Promise<string | undefined>;
   stopRecording(): Promise<void>;
+  /**
+   * Presents a research survey and submits the response.
+   *
+   * Resolves true if anything was collected — including a partial response from
+   * someone who answered two questions and closed the panel. Discarding partials
+   * would bias results toward people with time to finish.
+   */
+  showSurvey(study: Study): Promise<boolean>;
+  /** Fetches a study definition from the ingest service, then presents it. */
+  showSurveyById(studyId: string): Promise<boolean>;
   /** Retry anything stranded by an earlier network failure. */
   flush(): Promise<{ sent: number; remaining: number }>;
   /** Remove all UI, stop recording, and restore every patched global. */
@@ -98,6 +110,7 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
   let reporter = options.reporter;
   let customData = options.customData;
   let capturing = false;
+  let surveyOpen = false;
 
   // Anything stranded by a previous session's network failure goes out now.
   void queue.flush().then(({ sent }) => {
@@ -157,6 +170,77 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
       overlay.destroy();
       capturing = false;
       if (launcherVisible) launcher?.style.removeProperty('display');
+    }
+  };
+
+  /**
+   * Presents a study and submits whatever was collected.
+   *
+   * A closure rather than a method on the returned object, so `showSurveyById`
+   * can call it directly — `this` inside that object literal does not resolve
+   * to the Widget type.
+   */
+  const showSurvey = async (study: Study): Promise<boolean> => {
+    // A second survey over a live one would stack panels and split the response
+    // across two submissions.
+    if (surveyOpen) {
+      log('survey ignored: one is already open');
+      return false;
+    }
+    surveyOpen = true;
+
+    try {
+      const result = await new SurveyRunner(study).present();
+      if (!result) {
+        log(`survey ${study.id} dismissed without answers`);
+        return false;
+      }
+
+      const ctx: BuildContext = {};
+      if (reporter) ctx.reporter = reporter;
+      if (customData) ctx.customData = customData;
+      // Links the response to the replay, so a researcher can watch what the
+      // person was doing when they answered.
+      const sessionId = replay.getSessionId();
+      if (sessionId) ctx.sessionId = sessionId;
+      const record = await consent.load();
+      if (record) ctx.consent = record;
+
+      const submission = await builder.buildResearchResponse(
+        {
+          type: 'research_response',
+          studyId: study.id,
+          answers: result.answers,
+          completed: result.completed,
+          durationMs: result.durationMs,
+        },
+        ctx,
+      );
+
+      await queue.enqueue(submission);
+      log(
+        `survey ${study.id} ${result.completed ? 'completed' : 'partial'} ` +
+          `(${result.answers.length} answer(s))`,
+      );
+      return true;
+    } finally {
+      surveyOpen = false;
+    }
+  };
+
+  const showSurveyById = async (studyId: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${options.endpoint}/v1/studies/${encodeURIComponent(studyId)}`, {
+        headers: { 'x-project-id': options.project },
+      });
+      if (!res.ok) {
+        log(`study ${studyId} could not be loaded (${res.status})`);
+        return false;
+      }
+      return await showSurvey((await res.json()) as Study);
+    } catch (err) {
+      log(`study ${studyId} fetch failed: ${err instanceof Error ? err.message : 'error'}`);
+      return false;
     }
   };
 
@@ -234,6 +318,9 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
     },
     startRecording: () => replay.start(),
     stopRecording: () => replay.stop(),
+
+    showSurvey,
+    showSurveyById,
     flush: () => queue.flush(),
     async unload(): Promise<void> {
       document.removeEventListener('keydown', onKey);

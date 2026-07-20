@@ -173,3 +173,12 @@ $('revoke').addEventListener('click', async () => {
 
 // Exposed so the seed script can drive the app without clicking through the UI.
 window.__demo = { widget, setRecording };
+
+// --- research ---------------------------------------------------------------
+
+// Fetched from the ingest service by id, so wording can change without this
+// page shipping again.
+$('survey').addEventListener('click', async () => {
+  const shown = await widget.showSurveyById('checkout-nps');
+  if (!shown) console.info('[demo] survey not shown — is the study defined and active?');
+});

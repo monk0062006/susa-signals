@@ -11,6 +11,18 @@ jobs:
   web:
     name: Web (typecheck + privacy)
     runs-on: ubuntu-latest
+    # The ingest tests and the survey end-to-end test both need a real database;
+    # mocking Postgres would only assert that our SQL strings have not changed.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: markerio_core_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +44,11 @@ jobs:
         id: chrome
         with:
           chrome-version: stable
+
+      - name: Database integration tests
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/markerio_core_test
+        run: npm run test --workspace @markerio-usa/ingest
 
       - name: Privacy tests
         # These assert that masking redacts before bytes leave the browser.

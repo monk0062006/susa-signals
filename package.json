@@ -18,7 +18,8 @@
     "demo": "npm run bundle && node scripts/serve-demo.mjs",
     "dashboard": "npm run build --workspace @markerio-usa/dashboard",
     "seed": "node scripts/seed-demo.mjs",
-    "test:dashboard": "node scripts/test-dashboard.mjs"
+    "test:dashboard": "node scripts/test-dashboard.mjs",
+    "test:survey": "node scripts/test-survey.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",

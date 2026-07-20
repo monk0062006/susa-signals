@@ -5,3 +5,5 @@ export { WebInstrumentation } from './instrument.js';
 export { AnnotationOverlay } from './overlay.js';
 export { ReplayRecorder } from './replay.js';
 export type { ReplayOptions } from './replay.js';
+export { SurveyRunner } from './survey.js';
+export type { SurveyResult } from './survey.js';

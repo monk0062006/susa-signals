@@ -6,6 +6,7 @@ import multer from 'multer';
 import type { Pool } from 'pg';
 import { Repository } from './db/repository.js';
 import { Retention } from './db/retention.js';
+import { Studies } from './db/studies.js';
 import { ValidationError, parseReplayChunk, parseSubmission } from './validate.js';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -38,6 +39,7 @@ export interface AppOptions {
 export function createIngestApp(options: AppOptions): express.Express {
   const repo = new Repository(options.pool);
   const retention = new Retention(options.pool);
+  const studies = new Studies(options.pool);
 
   const app = express();
   const upload = multer({
@@ -210,6 +212,84 @@ export function createIngestApp(options: AppOptions): express.Express {
     try {
       const deleted = await retention.deleteReplaySession(projectId(req), req.params.sessionId);
       res.status(deleted ? 204 : 404).end();
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  // --- studies --------------------------------------------------------------
+
+  app.get('/v1/studies', async (req, res) => {
+    try {
+      res.json({ studies: await studies.list(projectId(req)) });
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  /**
+   * Fetched by the SDK before presenting a survey, so wording can change
+   * without the host product shipping a release.
+   */
+  app.get('/v1/studies/:id', async (req, res) => {
+    try {
+      const study = await studies.get(projectId(req), req.params.id);
+      if (!study) {
+        res.sendStatus(404);
+        return;
+      }
+      // A paused study must not be presented to users, but stays readable so
+      // existing responses keep their context in the dashboard.
+      if (!study.active) {
+        res.status(409).json({ error: 'Study is not active' });
+        return;
+      }
+      res.json(study);
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  app.put('/v1/studies/:id', async (req, res) => {
+    try {
+      const project = projectId(req);
+      const body = req.body as Record<string, unknown>;
+
+      const study = await studies.upsert({
+        id: req.params.id,
+        projectId: project,
+        name: typeof body.name === 'string' ? body.name : req.params.id,
+        questions: Array.isArray(body.questions) ? body.questions : [],
+        intro: typeof body.intro === 'string' ? body.intro : undefined,
+        thanks: typeof body.thanks === 'string' ? body.thanks : undefined,
+        active: typeof body.active === 'boolean' ? body.active : undefined,
+      });
+
+      res.status(200).json(study);
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  app.delete('/v1/studies/:id', async (req, res) => {
+    try {
+      const deleted = await studies.delete(projectId(req), req.params.id);
+      res.status(deleted ? 204 : 404).end();
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  /** Aggregated responses, for the dashboard's study view. */
+  app.get('/v1/studies/:id/results', async (req, res) => {
+    try {
+      const project = projectId(req);
+      const study = await studies.get(project, req.params.id);
+      if (!study) {
+        res.sendStatus(404);
+        return;
+      }
+      res.json({ study, results: await studies.results(project, req.params.id) });
     } catch (err) {
       handleError(err, res);
     }

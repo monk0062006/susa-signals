@@ -104,6 +104,23 @@ export class Api {
     return body.reports ?? [];
   }
 
+  async listStudies(): Promise<Array<{ id: string; name: string; active: boolean; questions: unknown[] }>> {
+    const res = await fetch(`${this.base}/v1/studies`, {
+      headers: { 'x-project-id': this.projectId },
+    });
+    if (!res.ok) throw new Error(`Failed to load studies (${res.status})`);
+    const body = (await res.json()) as { studies: Array<{ id: string; name: string; active: boolean; questions: unknown[] }> };
+    return body.studies ?? [];
+  }
+
+  async getStudyResults(studyId: string): Promise<{ study: unknown; results: unknown }> {
+    const res = await fetch(`${this.base}/v1/studies/${encodeURIComponent(studyId)}/results`, {
+      headers: { 'x-project-id': this.projectId },
+    });
+    if (!res.ok) throw new Error(`Failed to load results (${res.status})`);
+    return (await res.json()) as { study: unknown; results: unknown };
+  }
+
   /** Returns null when the session has no stored chunks, which is normal. */
   async getReplay(sessionId: string): Promise<ReplaySession | null> {
     const res = await fetch(`${this.base}/v1/replay/${sessionId}`, {
