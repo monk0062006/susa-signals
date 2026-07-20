@@ -116,42 +116,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pick an available simulator
+      - name: Resolve a simulator UDID
         id: sim
-        # Runner images change their bundled devices between releases, so the
-        # destination is discovered rather than hard-coded to a model name that
-        # silently disappears.
+        # By UDID, not by name. A name with a stray character matches nothing,
+        # and xcodebuild answers by silently falling back to "My Mac" - which is
+        # how this job spent several runs building for macOS while reporting
+        # itself as a simulator job.
         run: |
           set -o pipefail
-          xcrun simctl list devices available | head -30
-          NAME=$(xcrun simctl list devices available | grep -oE 'iPhone [0-9]+[A-Za-z ]*' | head -1)
-          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
-          echo "selected: ${NAME}"
+          UDID=$(xcrun simctl list devices available --json             | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v))")
+          test -n "$UDID"
+          echo "udid=${UDID}" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep -F "$UDID"
 
-      # Compiles AND runs the UIKit paths — ScreenCapture, the annotation
-      # renderer, the composer — which the macOS job skips entirely because
-      # canImport(UIKit) is false there. Building alone proved they parse;
-      # running proves redaction actually covers pixels.
+      # Compiles AND runs the UIKit paths - ScreenCapture, the annotation
+      # renderer, the composer - which the macOS job skips entirely because
+      # canImport(UIKit) is false there.
       #
       # No pipe into a formatter and no || fallback: both swallow xcodebuild's
       # exit status, and this job once reported success over a failing build for
-      # exactly that reason.
-      # Diagnostic: the UIKit suite compiled into the bundle on the previous run
-      # but never appeared in the results. Naming it explicitly makes xcodebuild
-      # say why — a missing class is a hard error rather than a silent skip.
-      - name: Confirm the UIKit suite is discoverable
-        working-directory: platforms/ios
-        run: |
-          set -o pipefail
-          xcodebuild test \
-            -scheme Feedback \
-            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
-            -only-testing:FeedbackTests/AnnotationRendererTests
-
+      # exactly that reason. tee preserves it via pipefail.
       - name: Test on iOS Simulator
         working-directory: platforms/ios
         run: |
           set -o pipefail
-          xcodebuild test \
-            -scheme Feedback \
-            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}"
+          xcodebuild test             -scheme Feedback             -destination "id=${{ steps.sim.outputs.udid }}"             | tee /tmp/xcodebuild.log
+
+      # Guards the regression above. If the build silently retargets macOS the
+      # UIKit sources vanish, taking the suite that proves redaction works with
+      # them - while the job still goes green.
+      - name: Assert it targeted iOS and ran the UIKit suite
+        run: |
+          grep -q -- "-apple-ios" /tmp/xcodebuild.log             || { echo "::error::wrong platform - no iOS target triple in the build log"; exit 1; }
+          grep -q "Test Suite 'AnnotationRendererTests' passed" /tmp/xcodebuild.log             || { echo "::error::the UIKit suite did not run - it was compiled out"; exit 1; }
+          echo "confirmed: iOS target triple present, UIKit suite ran"
