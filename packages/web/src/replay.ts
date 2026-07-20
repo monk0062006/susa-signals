@@ -4,7 +4,23 @@ import {
   type ReplayChunk,
   uuid,
 } from '@markerio-usa/core';
-import { record } from 'rrweb';
+/**
+ * rrweb is the single largest dependency in this SDK, and session replay is
+ * opt-in twice over: the host app must enable it AND the user must have granted
+ * consent. Loading it eagerly makes every visitor of every customer's site
+ * download a recorder that, for most of them, will never run.
+ *
+ * Imported dynamically so it is code-split and fetched only once recording
+ * actually starts — which is after the consent gate, not before.
+ */
+type RecordFn = typeof import('rrweb').record;
+
+let rrwebPromise: Promise<RecordFn> | undefined;
+
+function loadRecorder(): Promise<RecordFn> {
+  rrwebPromise ??= import('rrweb').then((mod) => mod.record);
+  return rrwebPromise;
+}
 
 /**
  * Chunk ceiling. `fetch(keepalive: true)` — the only way to get the final chunk
@@ -95,6 +111,9 @@ export class ReplayRecorder {
       this.log('replay not started: no session_replay consent');
       return undefined;
     }
+
+    // Fetched only after the consent gate above has passed.
+    const record = await loadRecorder();
 
     this.sessionId = uuid();
     this.startedAt = Date.now();

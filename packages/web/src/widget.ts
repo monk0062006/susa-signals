@@ -10,7 +10,7 @@ import {
   type Study,
   type Submission,
 } from '@markerio-usa/core';
-import { WebPlatformAdapter } from './adapter.js';
+import { WebPlatformAdapter, prefetchScreenshotEngine } from './adapter.js';
 import { WebInstrumentation } from './instrument.js';
 import { AnnotationOverlay } from './overlay.js';
 import { ReplayRecorder, type ReplayOptions } from './replay.js';
@@ -271,6 +271,17 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
     `;
     launcher.onclick = () => void capture();
     document.body.appendChild(launcher);
+
+    // Warm the screenshot chunk once the page is otherwise idle, so opening the
+    // composer is instant without the initial load paying for it.
+    if ('requestIdleCallback' in window) {
+      (window as Window & { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback(
+        prefetchScreenshotEngine,
+      );
+    } else {
+      // Safari has no requestIdleCallback; a timeout is close enough for a prefetch.
+      setTimeout(prefetchScreenshotEngine, 2000);
+    }
   }
 
   // --- keyboard shortcut ----------------------------------------------------

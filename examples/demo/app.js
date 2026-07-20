@@ -1,4 +1,4 @@
-import { loadWidget } from './sdk.js';
+import { loadWidget } from './sdk/sdk.js';
 
 const INGEST = 'http://localhost:4000';
 const PROJECT = 'proj_demo';

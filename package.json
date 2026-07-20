@@ -14,7 +14,7 @@
     "test:privacy": "npm run bundle && node scripts/test-privacy.mjs",
     "typecheck": "tsc -b packages/core packages/web",
     "ingest": "npm run start --workspace @markerio-usa/ingest",
-    "bundle": "esbuild packages/web/src/index.ts --bundle --format=esm --outfile=examples/demo/sdk.js",
+    "bundle": "esbuild packages/web/src/index.ts --bundle --format=esm --splitting --outdir=examples/demo/sdk --entry-names=sdk --chunk-names=[name]-[hash]",
     "demo": "npm run bundle && node scripts/serve-demo.mjs",
     "dashboard": "npm run build --workspace @markerio-usa/dashboard",
     "seed": "node scripts/seed-demo.mjs",

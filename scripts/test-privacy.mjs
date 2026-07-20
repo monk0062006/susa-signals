@@ -60,8 +60,20 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
 
+  // Track chunk fetches to prove the heavy dependencies really are deferred.
+  const requested = [];
+  page.on('request', (req) => requested.push(req.url()));
+
   await page.goto(URL, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__ready === true', { timeout: 10_000 });
+
+  console.log('\nLazy loading');
+  const fetchedRrweb = () => requested.some((u) => /rrweb-[A-Z0-9]+\.js/i.test(u));
+  check(
+    'rrweb is NOT downloaded on page load',
+    !fetchedRrweb(),
+    requested.filter((u) => u.includes('rrweb')).join(', '),
+  );
 
   console.log('\nConsent gate');
   const deniedSession = await page.evaluate(() => window.__test.startDenied());
@@ -74,6 +86,10 @@ try {
   console.log('\nMasking');
   const grantedSession = await page.evaluate(() => window.__test.startGranted());
   check('recorder starts when consent is present', typeof grantedSession === 'string');
+
+  // Fetched only after the consent gate passed — the ordering that makes the
+  // deferral meaningful rather than incidental.
+  check('rrweb IS downloaded once recording starts', fetchedRrweb());
 
   // Type into the fields after recording begins, so the input events are captured.
   await page.type('#password', PASSWORD);
