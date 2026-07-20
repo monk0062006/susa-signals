@@ -10,6 +10,11 @@
             android:name="io.markerusa.feedback.CaptureTestActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+
+        <activity
+            android:name="io.markerusa.feedback.MaskingTestActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     </application>
 
 </manifest>

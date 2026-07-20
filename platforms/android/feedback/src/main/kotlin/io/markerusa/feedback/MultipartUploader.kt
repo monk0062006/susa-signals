@@ -19,8 +19,13 @@ internal class MultipartUploader(
 ) {
     private val endpoint = endpoint.trimEnd('/')
 
-    /** Returns the server-assigned attachment id. */
-    fun upload(bytes: ByteArray, filename: String): String {
+    /**
+     * Returns the server-assigned attachment id.
+     *
+     * `mimeType` is explicit because replay frames are JPEG while screenshots
+     * are PNG, and the server validates the declared type against an allowlist.
+     */
+    fun upload(bytes: ByteArray, filename: String, mimeType: String = "image/png"): String {
         val boundary = "----markerio${System.nanoTime()}"
         var connection: HttpURLConnection? = null
 
@@ -41,7 +46,7 @@ internal class MultipartUploader(
                 out.write(
                     ("--$boundary\r\n" +
                         "Content-Disposition: form-data; name=\"file\"; filename=\"$filename\"\r\n" +
-                        "Content-Type: image/png\r\n\r\n").toByteArray(Charsets.UTF_8)
+                        "Content-Type: $mimeType\r\n\r\n").toByteArray(Charsets.UTF_8)
                 )
                 out.write(bytes)
                 out.write(

@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.util.Log
 import io.markerusa.feedback.annotate.FeedbackOverlay
+import io.markerusa.feedback.replay.FrameRecorder
+import io.markerusa.feedback.replay.HttpFrameUploader
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -45,6 +47,17 @@ class FeedbackSdk private constructor(
     /** Guards against a second composer opening over a live one. */
     @Volatile
     private var overlayVisible = false
+
+    /**
+     * Frame-based session replay. Created eagerly but inert until `start` is
+     * called AND consent exists — constructing it costs nothing and starts
+     * nothing.
+     */
+    private val replay: FrameRecorder = FrameRecorder(
+        consent = consent,
+        uploader = HttpFrameUploader(config.endpoint, config.projectId, client),
+        log = ::log,
+    )
 
     companion object {
         @Volatile
@@ -108,8 +121,24 @@ class FeedbackSdk private constructor(
 
     fun revokeConsent() {
         consent.revoke()
+        // Withdrawal is immediate: buffered frames are discarded, not sent.
+        replay.abandon()
         log("consent revoked")
     }
+
+    /**
+     * Starts session replay if consent allows. Returns the session id, or null.
+     *
+     * Takes an Activity because frames come from a live window. Callers should
+     * restart it in `onResume` and stop it in `onPause` — a recorder that keeps
+     * capturing a backgrounded app burns battery for frames of nothing.
+     */
+    fun startRecording(activity: Activity): String? = replay.start(activity)
+
+    fun stopRecording() = replay.stop()
+
+    /** The id linking a report filed during this session to its recording. */
+    fun currentSessionId(): String? = replay.getSessionId()
 
     /**
      * Captures the screen and presents the annotation composer.
@@ -228,6 +257,9 @@ class FeedbackSdk private constructor(
                     reporter = reporter,
                     attachments = attachments,
                     customData = customData,
+                    // Links the report to the recording, so it can be watched
+                    // in context — the whole point of pairing the two.
+                    sessionId = replay.getSessionId(),
                     consent = consent.load()
                 )
 
