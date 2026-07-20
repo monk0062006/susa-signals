@@ -122,7 +122,15 @@ jobs:
       # Compiles the UIKit paths — ScreenCapture, the annotation canvas and the
       # composer — which the macOS job silently skips. Without this, "iOS
       # compiles" means only the platform-agnostic half of the package.
+      # Compiles the UIKit paths — ScreenCapture, the annotation canvas and the
+      # composer — which the macOS job silently skips because canImport(UIKit)
+      # is false there.
+      #
+      # No pipe into a formatter and no || fallback: both swallow xcodebuild's
+      # exit status, and this job previously reported success over a failing
+      # build because of exactly that.
       - name: Build for iOS Simulator
         working-directory: platforms/ios
         run: |
-          xcodebuild build             -scheme Feedback             -destination 'generic/platform=iOS Simulator'             -skipPackagePluginValidation             | xcpretty || xcodebuild build -scheme Feedback -destination 'generic/platform=iOS Simulator'
+          set -o pipefail
+          xcodebuild build             -scheme Feedback             -destination 'generic/platform=iOS Simulator'

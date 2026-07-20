@@ -213,17 +213,19 @@ final class FeedbackOverlayView: UIView {
 
         let tools: [(Tool, String)] = [(.rect, "Box"), (.arrow, "Arrow"), (.pen, "Pen"), (.blur, "Redact")]
 
-        for (tool, label) in tools {
+        // Target-action rather than UIAction closures: UIButton.addAction is
+        // iOS 14+, and this package declares iOS 13. The tool is carried on the
+        // button's tag so one selector serves all four.
+        for (index, entry) in tools.enumerated() {
             let button = UIButton(type: .system)
-            button.setTitle(label, for: .normal)
+            button.setTitle(entry.1, for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
             button.layer.cornerRadius = 6
             button.layer.borderWidth = 1
-            button.addAction(UIAction { [weak self] _ in
-                self?.select(tool: tool)
-            }, for: .touchUpInside)
+            button.tag = index
+            button.addTarget(self, action: #selector(toolTapped(_:)), for: .touchUpInside)
 
-            toolButtons.append((tool, button))
+            toolButtons.append((entry.0, button))
             row.addArrangedSubview(button)
         }
 
@@ -234,7 +236,7 @@ final class FeedbackOverlayView: UIView {
         undo.layer.cornerRadius = 6
         undo.layer.borderWidth = 1
         undo.layer.borderColor = fieldBorder.cgColor
-        undo.addAction(UIAction { [weak self] _ in self?.canvas.undo() }, for: .touchUpInside)
+        undo.addTarget(self, action: #selector(undoTapped), for: .touchUpInside)
         row.addArrangedSubview(undo)
 
         select(tool: .rect)
@@ -296,7 +298,7 @@ final class FeedbackOverlayView: UIView {
         send.backgroundColor = accent
         send.layer.cornerRadius = 6
         send.heightAnchor.constraint(equalToConstant: 46).isActive = true
-        send.addAction(UIAction { [weak self] _ in self?.attemptSend() }, for: .touchUpInside)
+        send.addTarget(self, action: #selector(sendTapped), for: .touchUpInside)
 
         let cancel = UIButton(type: .system)
         cancel.setTitle("Cancel", for: .normal)
@@ -304,14 +306,31 @@ final class FeedbackOverlayView: UIView {
         cancel.layer.cornerRadius = 6
         cancel.layer.borderWidth = 1
         cancel.layer.borderColor = fieldBorder.cgColor
-        cancel.addAction(UIAction { [weak self] _ in
-            self?.dismiss()
-            self?.onCancel()
-        }, for: .touchUpInside)
+        cancel.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
 
         row.addArrangedSubview(send)
         row.addArrangedSubview(cancel)
         return row
+    }
+
+    // --- actions --------------------------------------------------------------
+
+    @objc private func toolTapped(_ sender: UIButton) {
+        guard sender.tag >= 0, sender.tag < toolButtons.count else { return }
+        select(tool: toolButtons[sender.tag].tool)
+    }
+
+    @objc private func undoTapped() {
+        canvas.undo()
+    }
+
+    @objc private func sendTapped() {
+        attemptSend()
+    }
+
+    @objc private func cancelTapped() {
+        dismiss()
+        onCancel()
     }
 
     private func attemptSend() {
