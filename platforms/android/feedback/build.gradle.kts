@@ -13,6 +13,7 @@ android {
         // window, requires API 24.
         minSdk = 24
         consumerProguardFiles("consumer-rules.pro")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -50,6 +51,13 @@ android {
  */
 dependencies {
     testImplementation("junit:junit:4.13.2")
+
+    // Instrumented tests only — these never reach a consumer's app, so the
+    // zero-dependency rule above still holds for the shipped library.
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
 }
 
 /**
