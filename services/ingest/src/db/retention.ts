@@ -29,6 +29,7 @@ export interface SweepResult {
 export interface ErasureResult {
   submissionsDeleted: number;
   replaySessionsDeleted: number;
+  eventsDeleted: number;
 }
 
 /** How many rows one sweep pass removes per table. */
@@ -222,11 +223,28 @@ export class Retention {
         replaySessionsDeleted = rowCount ?? 0;
       }
 
+      // Analytics events carry the subject as `user_id`, set by identify().
+      // Leaving them would mean a "delete my data" request that quietly kept a
+      // full behavioural history — the largest row count of the three.
+      const { rowCount: eventsDeleted } = await client.query(
+        `
+        DELETE FROM feedback.events
+         WHERE project_id = $1
+           AND user_id IS NOT NULL
+           AND (
+             ($2::text IS NOT NULL AND lower(user_id) = lower($2))
+             OR ($3::text IS NOT NULL AND user_id = $3)
+           )
+        `,
+        [projectId, subject.email ?? null, subject.externalId ?? null],
+      );
+
       await client.query('COMMIT');
 
       return {
         submissionsDeleted: submissionsDeleted ?? 0,
         replaySessionsDeleted,
+        eventsDeleted: eventsDeleted ?? 0,
       };
     } catch (err) {
       await client.query('ROLLBACK').catch(() => {});

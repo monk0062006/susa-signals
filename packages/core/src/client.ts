@@ -60,6 +60,17 @@ export class IngestClient {
     await this.post('/v1/replay/chunks', JSON.stringify(chunk), {}, chunk.final);
   }
 
+  /**
+   * Ships a batch of analytics events.
+   *
+   * One request per batch rather than per event: analytics volume is orders of
+   * magnitude above reports, and a request per event would swamp both the
+   * device's radio and the ingest service.
+   */
+  async sendEvents(body: string): Promise<void> {
+    await this.post('/v1/events', body, {});
+  }
+
   private async post(
     path: string,
     body: string,

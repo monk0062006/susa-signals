@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import multer from 'multer';
 import type { Pool } from 'pg';
+import { Events, parseEventBatch } from './db/events.js';
 import { Repository } from './db/repository.js';
 import { Retention } from './db/retention.js';
 import { Studies } from './db/studies.js';
@@ -40,6 +41,7 @@ export function createIngestApp(options: AppOptions): express.Express {
   const repo = new Repository(options.pool);
   const retention = new Retention(options.pool);
   const studies = new Studies(options.pool);
+  const events = new Events(options.pool);
 
   const app = express();
   const upload = multer({
@@ -212,6 +214,63 @@ export function createIngestApp(options: AppOptions): express.Express {
     try {
       const deleted = await retention.deleteReplaySession(projectId(req), req.params.sessionId);
       res.status(deleted ? 204 : 404).end();
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  // --- analytics ------------------------------------------------------------
+
+  /**
+   * Batch ingest. Returns 202 rather than 201: the SDK does not wait on this
+   * and has nothing useful to do with a per-event result.
+   */
+  app.post('/v1/events', async (req, res) => {
+    try {
+      const project = projectId(req);
+      const { events: batch, device } = parseEventBatch(req.body);
+
+      const { inserted } = await events.insertBatch(project, batch, device);
+      res.status(202).json({ received: batch.length, inserted });
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  app.get('/v1/events', async (req, res) => {
+    try {
+      res.json({
+        events: await events.recent(
+          projectId(req),
+          req.query.limit ? Number(req.query.limit) : undefined,
+        ),
+      });
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  app.get('/v1/events/counts', async (req, res) => {
+    try {
+      res.json({
+        counts: await events.counts(
+          projectId(req),
+          req.query.days ? Number(req.query.days) : undefined,
+        ),
+      });
+    } catch (err) {
+      handleError(err, res);
+    }
+  });
+
+  app.get('/v1/events/timeseries', async (req, res) => {
+    try {
+      res.json({
+        points: await events.timeseries(projectId(req), {
+          name: typeof req.query.name === 'string' ? req.query.name : undefined,
+          days: req.query.days ? Number(req.query.days) : undefined,
+        }),
+      });
     } catch (err) {
       handleError(err, res);
     }

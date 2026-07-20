@@ -17,7 +17,13 @@ export type ConsentScope =
   /** Console and network buffers attached to a report. */
   | 'diagnostics'
   /** Continuous DOM session replay. The consequential one. */
-  | 'session_replay';
+  | 'session_replay'
+  /**
+   * Product analytics. A separate legal basis from diagnostics under GDPR and
+   * ePrivacy, so it cannot ride on the implicit consent that filing a bug
+   * report carries.
+   */
+  | 'analytics';
 
 export interface ConsentRecord {
   scopes: ConsentScope[];

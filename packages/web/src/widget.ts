@@ -1,4 +1,5 @@
 import {
+  Analytics,
   ConsentManager,
   IngestClient,
   ReportBuilder,
@@ -51,7 +52,9 @@ export interface Widget {
    * it collected real agreement — this call is the SDK's evidence, not a
    * substitute for asking.
    */
-  grantConsent(scopes: Array<'screenshot' | 'diagnostics' | 'session_replay'>): Promise<void>;
+  grantConsent(
+    scopes: Array<'screenshot' | 'diagnostics' | 'session_replay' | 'analytics'>,
+  ): Promise<void>;
   /** Withdraws consent, stops any recording, and discards unsent replay data. */
   revokeConsent(): Promise<void>;
   /** Starts replay if consent allows. Returns the session id, or undefined. */
@@ -67,6 +70,16 @@ export interface Widget {
   showSurvey(study: Study): Promise<boolean>;
   /** Fetches a study definition from the ingest service, then presents it. */
   showSurveyById(studyId: string): Promise<boolean>;
+  /**
+   * Records a product analytics event.
+   *
+   * Buffered in memory and batched, never persisted to the offline queue —
+   * events are high-volume and individually disposable, and letting them share
+   * the outbox would evict the bug reports it exists to protect.
+   */
+  track(event: string, properties?: Record<string, string | number | boolean | null>): void;
+  /** Associates subsequent events with a person. */
+  identify(user: Reporter | string): void;
   /** Retry anything stranded by an earlier network failure. */
   flush(): Promise<{ sent: number; remaining: number }>;
   /** Remove all UI, stop recording, and restore every patched global. */
@@ -104,6 +117,17 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
     consent,
     options.project,
     options.replay ?? {},
+    log,
+  );
+
+  const analytics = new Analytics(
+    {
+      sendEvents: async (events, device) =>
+        client.sendEvents(JSON.stringify({ events, device })),
+    },
+    consent,
+    () => adapter.collectDeviceContext(),
+    {},
     log,
   );
 
@@ -295,6 +319,9 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
     document.addEventListener('keydown', onKey);
   }
 
+  analytics.start();
+  window.addEventListener('pagehide', () => void analytics.flush());
+
   log(`widget loaded for project ${options.project}`);
 
   return {
@@ -325,6 +352,7 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
       await consent.revoke();
       // Withdrawal is immediate: anything buffered is discarded, not sent.
       await replay.abandon();
+      analytics.discard();
       log('consent revoked');
     },
     startRecording: () => replay.start(),
@@ -332,11 +360,14 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
 
     showSurvey,
     showSurveyById,
+    track: (event, properties) => analytics.track(event, properties),
+    identify: (user) => analytics.identify(user),
     flush: () => queue.flush(),
     async unload(): Promise<void> {
       document.removeEventListener('keydown', onKey);
       launcher?.remove();
       await replay.stop();
+      await analytics.stop();
       instrumentation.uninstall();
     },
   };

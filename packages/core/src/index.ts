@@ -46,6 +46,9 @@ export type {
   TextQuestion,
 } from './study.js';
 
+export { Analytics } from './analytics.js';
+export type { AnalyticsEvent, AnalyticsOptions, AnalyticsTransport } from './analytics.js';
+
 export { ReportQueue } from './queue.js';
 export { ReportBuilder } from './session.js';
 export type { BuildContext, CaptureDraft } from './session.js';
