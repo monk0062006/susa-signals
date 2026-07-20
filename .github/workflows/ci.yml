@@ -136,6 +136,18 @@ jobs:
       # No pipe into a formatter and no || fallback: both swallow xcodebuild's
       # exit status, and this job once reported success over a failing build for
       # exactly that reason.
+      # Diagnostic: the UIKit suite compiled into the bundle on the previous run
+      # but never appeared in the results. Naming it explicitly makes xcodebuild
+      # say why — a missing class is a hard error rather than a silent skip.
+      - name: Confirm the UIKit suite is discoverable
+        working-directory: platforms/ios
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme Feedback \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+            -only-testing:FeedbackTests/AnnotationRendererTests
+
       - name: Test on iOS Simulator
         working-directory: platforms/ios
         run: |
