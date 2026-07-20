@@ -111,26 +111,35 @@ jobs:
         run: swift test -v
 
   ios-simulator:
-    name: iOS (simulator build)
+    name: iOS (simulator tests)
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show available simulators
-        run: xcrun simctl list devices available | head -20
+      - name: Pick an available simulator
+        id: sim
+        # Runner images change their bundled devices between releases, so the
+        # destination is discovered rather than hard-coded to a model name that
+        # silently disappears.
+        run: |
+          set -o pipefail
+          xcrun simctl list devices available | head -30
+          NAME=$(xcrun simctl list devices available | grep -oE 'iPhone [0-9]+[A-Za-z ]*' | head -1)
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "selected: ${NAME}"
 
-      # Compiles the UIKit paths — ScreenCapture, the annotation canvas and the
-      # composer — which the macOS job silently skips. Without this, "iOS
-      # compiles" means only the platform-agnostic half of the package.
-      # Compiles the UIKit paths — ScreenCapture, the annotation canvas and the
-      # composer — which the macOS job silently skips because canImport(UIKit)
-      # is false there.
+      # Compiles AND runs the UIKit paths — ScreenCapture, the annotation
+      # renderer, the composer — which the macOS job skips entirely because
+      # canImport(UIKit) is false there. Building alone proved they parse;
+      # running proves redaction actually covers pixels.
       #
       # No pipe into a formatter and no || fallback: both swallow xcodebuild's
-      # exit status, and this job previously reported success over a failing
-      # build because of exactly that.
-      - name: Build for iOS Simulator
+      # exit status, and this job once reported success over a failing build for
+      # exactly that reason.
+      - name: Test on iOS Simulator
         working-directory: platforms/ios
         run: |
           set -o pipefail
-          xcodebuild build             -scheme Feedback             -destination 'generic/platform=iOS Simulator'
+          xcodebuild test \
+            -scheme Feedback \
+            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}"
