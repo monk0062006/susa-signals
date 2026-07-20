@@ -102,6 +102,27 @@ jobs:
 
       # Runs the schema, consent, queue and geometry suites. Those were kept free
       # of UIKit precisely so they execute here without a simulator.
-      - name: Unit tests
+      #
+      # NOTE: this builds for macOS, where canImport(UIKit) is false — so the
+      # UIKit sources are excluded from this job entirely. The simulator job
+      # below is what actually compiles them.
+      - name: Unit tests (logic, macOS target)
         working-directory: platforms/ios
         run: swift test -v
+
+  ios-simulator:
+    name: iOS (simulator build)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show available simulators
+        run: xcrun simctl list devices available | head -20
+
+      # Compiles the UIKit paths — ScreenCapture, the annotation canvas and the
+      # composer — which the macOS job silently skips. Without this, "iOS
+      # compiles" means only the platform-agnostic half of the package.
+      - name: Build for iOS Simulator
+        working-directory: platforms/ios
+        run: |
+          xcodebuild build             -scheme Feedback             -destination 'generic/platform=iOS Simulator'             -skipPackagePluginValidation             | xcpretty || xcodebuild build -scheme Feedback -destination 'generic/platform=iOS Simulator'
