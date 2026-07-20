@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      INTERNET is the only permission this library declares. It is added to the
+      host app's manifest by merge, so every entry here is a permission their
+      users will see. ACCESS_NETWORK_STATE is deliberately not requested.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+</manifest>

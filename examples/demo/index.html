@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meridian — Billing</title>
+    <link rel="stylesheet" href="./app.css" />
+  </head>
+  <body>
+    <div class="app">
+      <nav class="nav">
+        <div class="nav__brand">
+          <span class="nav__mark">M</span>
+          <span>Meridian</span>
+        </div>
+        <div class="nav__links">
+          <a class="nav__link" href="#">Dashboards</a>
+          <a class="nav__link" href="#">Reports</a>
+          <a class="nav__link" href="#">Sources</a>
+          <a class="nav__link is-active" href="#">Billing</a>
+        </div>
+        <div class="nav__spacer"></div>
+        <div class="nav__user">
+          <span>Dana Whitfield</span>
+          <span class="nav__avatar">DW</span>
+        </div>
+      </nav>
+
+      <div class="page">
+        <div class="page__head">
+          <h1 class="page__title">Upgrade your plan</h1>
+          <p class="page__sub">You are currently on <strong>Starter</strong>. Changes take effect immediately.</p>
+        </div>
+
+        <!-- ---------------- main column ---------------- -->
+        <main>
+          <section class="card">
+            <div class="card__head">
+              <h2 class="card__title">Choose a plan</h2>
+              <p class="card__sub">Billed monthly. Cancel any time.</p>
+            </div>
+            <div class="card__body">
+              <div class="plans" id="plans">
+                <div class="plan" data-plan="team" data-price="49">
+                  <span class="plan__radio"></span>
+                  <span class="plan__body">
+                    <span class="plan__name">Team</span>
+                    <span class="plan__desc">Up to 10 seats, 90-day retention</span>
+                  </span>
+                  <span class="plan__price">$49<small>/mo</small></span>
+                </div>
+                <div class="plan is-selected" data-plan="business" data-price="149">
+                  <span class="plan__radio"></span>
+                  <span class="plan__body">
+                    <span class="plan__name">Business</span>
+                    <span class="plan__desc">Unlimited seats, 1-year retention, SSO</span>
+                  </span>
+                  <span class="plan__price">$149<small>/mo</small></span>
+                </div>
+                <div class="plan" data-plan="enterprise" data-price="499">
+                  <span class="plan__radio"></span>
+                  <span class="plan__body">
+                    <span class="plan__name">Enterprise</span>
+                    <span class="plan__desc">Custom contracts, dedicated support, audit logs</span>
+                  </span>
+                  <span class="plan__price">$499<small>/mo</small></span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__head">
+              <h2 class="card__title">Payment details</h2>
+              <p class="card__sub">Test card <code>4242 4242 4242 4242</code> succeeds. Any other number is declined.</p>
+            </div>
+            <div class="card__body">
+              <div id="alert-slot"></div>
+
+              <div class="field">
+                <label class="field__label" for="card">Card number</label>
+                <input class="input input--mono" id="card" inputmode="numeric"
+                       placeholder="4242 4242 4242 4242" value="4111 1111 1111 1111"
+                       autocomplete="cc-number" name="cc-number" />
+                <div class="field__hint">Prefilled with a card that will be declined, so the bug is reproducible.</div>
+              </div>
+
+              <div class="field field__row">
+                <div>
+                  <label class="field__label" for="expiry">Expiry</label>
+                  <input class="input input--mono" id="expiry" placeholder="MM / YY" value="04 / 28" autocomplete="cc-exp" />
+                </div>
+                <div>
+                  <label class="field__label" for="cvc">CVC</label>
+                  <input class="input input--mono" id="cvc" placeholder="123" value="311"
+                         autocomplete="cc-csc" name="cvv" />
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="pw">Confirm account password</label>
+                <input class="input" id="pw" type="password" placeholder="••••••••" autocomplete="current-password" />
+                <div class="field__hint">Masked in session replay — type into it and check the recording.</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__head">
+              <h2 class="card__title">API credentials</h2>
+              <p class="card__sub">Visible on this page on purpose — use the Redact tool on it when filing a report.</p>
+            </div>
+            <div class="card__body">
+              <div class="secret">
+                <span class="secret__label">Live secret key</span>
+                sk_live_4eC39HqLyjWDarjtT1zdp7dcMeridian8fK2xQ
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <!-- ---------------- side column ---------------- -->
+        <aside>
+          <section class="card">
+            <div class="card__head">
+              <h2 class="card__title">Order summary</h2>
+            </div>
+            <div class="card__body">
+              <div class="summary__row"><span id="summary-plan">Business plan</span><span id="summary-price">$149.00</span></div>
+              <div class="summary__row"><span>Proration credit</span><span>−$18.40</span></div>
+              <div class="summary__row"><span>Tax (estimated)</span><span id="summary-tax">$26.12</span></div>
+              <div class="summary__row summary__row--total"><span>Due today</span><span id="summary-total">$156.72</span></div>
+
+              <div style="margin-top:18px">
+                <button class="btn btn--primary" id="pay">Pay $156.72</button>
+              </div>
+              <div class="field__hint" style="text-align:center;margin-top:10px">
+                <span class="badge">Secure checkout</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__head">
+              <h2 class="card__title">Session replay</h2>
+              <p class="card__sub">Recording is gated on consent in the SDK, not in this UI.</p>
+            </div>
+            <div class="card__body">
+              <div class="consent">
+                <div class="consent__state">
+                  <span class="dot" id="rec-dot"></span>
+                  <span id="rec-status">Not recording</span>
+                </div>
+                <div class="consent__actions">
+                  <button class="btn btn--secondary" id="grant">Grant consent</button>
+                  <button class="btn btn--secondary" id="stop">Stop</button>
+                  <button class="btn btn--secondary" id="revoke">Revoke</button>
+                </div>
+                <div class="session-id" id="session-id">No active session</div>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

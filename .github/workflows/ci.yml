@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Lets you verify iOS on demand without waiting for a push.
+  workflow_dispatch:
+
+jobs:
+  web:
+    name: Web (typecheck + privacy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b packages/core packages/web
+
+      - name: Bundle SDK
+        run: npm run bundle
+
+      # puppeteer-core never downloads a browser, so CI must supply one.
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: stable
+
+      - name: Privacy tests
+        # These assert that masking redacts before bytes leave the browser.
+        # A failure here is a PII leak, not a flaky test — never skip it.
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
+        run: node scripts/test-privacy.mjs
+
+  android:
+    name: Android (build + unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        working-directory: platforms/android
+        run: ./gradlew :feedback:testDebugUnitTest --no-daemon
+
+      - name: Assemble release AAR
+        working-directory: platforms/android
+        run: ./gradlew :feedback:assembleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-results
+          path: platforms/android/feedback/build/reports/tests/
+
+  ios:
+    name: iOS (build + unit tests)
+    # The whole reason this workflow exists. iOS cannot be compiled on Windows or
+    # Linux — Apple ships the Swift toolchain for macOS only — so this runner is
+    # the only thing standing between the Swift sources and "never verified".
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build
+        working-directory: platforms/ios
+        run: swift build -v
+
+      # Runs the schema, consent, queue and geometry suites. Those were kept free
+      # of UIKit precisely so they execute here without a simulator.
+      - name: Unit tests
+        working-directory: platforms/ios
+        run: swift test -v

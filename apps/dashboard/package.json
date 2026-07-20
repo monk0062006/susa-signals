@@ -1,0 +1,13 @@
+{
+  "name": "@markerio-usa/dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --format=esm --outfile=../../services/ingest/public/dashboard.js --log-level=warning",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "rrweb": "^2.1.0"
+  }
+}

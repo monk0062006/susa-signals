@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Feedback</title>
+    <link rel="stylesheet" href="./dashboard.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar__brand">
+        <span class="topbar__mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H10l-4.4 3.8A1 1 0 0 1 4 19V5.5Z"
+                  fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="topbar__title">Feedback</span>
+      </div>
+
+      <div class="topbar__search">
+        <svg class="topbar__search-icon" width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="9" cy="9" r="6" stroke="currentColor" stroke-width="1.6"/>
+          <path d="m13.5 13.5 3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <input id="search" type="search" placeholder="Search titles, reporters, devices…" autocomplete="off" />
+      </div>
+
+      <div class="topbar__actions">
+        <label class="field-inline">
+          <span>Project</span>
+          <input id="project" size="11" spellcheck="false" />
+        </label>
+        <button id="refresh" class="btn btn--ghost" title="Refresh">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M16 10a6 6 0 1 1-1.8-4.3M16 3v3.2h-3.2" stroke="currentColor" stroke-width="1.6"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Refresh</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <aside class="sidebar">
+        <nav class="filters" id="filters" aria-label="Filter submissions">
+          <button class="chip is-active" data-filter="all">All <span class="chip__count" data-count="all">0</span></button>
+          <button class="chip" data-filter="bug">Bugs <span class="chip__count" data-count="bug">0</span></button>
+          <button class="chip" data-filter="feedback">Feedback <span class="chip__count" data-count="feedback">0</span></button>
+          <button class="chip" data-filter="research">Research <span class="chip__count" data-count="research">0</span></button>
+        </nav>
+        <div class="list" id="list" role="list"></div>
+      </aside>
+
+      <section class="detail" id="detail" aria-live="polite"></section>
+    </main>
+
+    <script type="module" src="./dashboard.js"></script>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Replay privacy test</title>
+  </head>
+  <body>
+    <h1>Replay masking test fixture</h1>
+
+    <form>
+      <input id="password" type="password" name="password" />
+      <input id="cardnum" type="text" name="card_number" />
+      <input id="normal" type="text" name="search" />
+    </form>
+
+    <p id="secret" data-private>PRIVATE-TEXT-CANARY</p>
+    <p id="public">PUBLIC-TEXT-CANARY</p>
+
+    <script type="module">
+      import { ReplayRecorder } from './sdk.js';
+
+      // Collect what the recorder would transmit, without a network round trip.
+      const sent = [];
+
+      const fakeClient = {
+        sendReplayChunk: async (chunk) => {
+          sent.push(chunk);
+        },
+      };
+
+      // Consent stub: granted, so the recorder actually runs.
+      const grantedConsent = { has: async () => true, load: async () => null };
+      // Consent stub: denied, to prove the gate holds.
+      const deniedConsent = { has: async () => false, load: async () => null };
+
+      window.__test = {
+        sent,
+        async startGranted() {
+          const r = new ReplayRecorder(fakeClient, grantedConsent, 'proj_test', {});
+          window.__recorder = r;
+          return await r.start();
+        },
+        async startDenied() {
+          const r = new ReplayRecorder(fakeClient, deniedConsent, 'proj_test', {});
+          return await r.start();
+        },
+        async stop() {
+          await window.__recorder?.stop();
+        },
+        serialized() {
+          return JSON.stringify(sent);
+        },
+      };
+
+      window.__ready = true;
+    </script>
+  </body>
+</html>
