@@ -86,9 +86,10 @@ jobs:
 
   android-emulator:
     name: Android (instrumented tests)
-    # ubuntu-latest supports nested virtualisation via KVM, which the emulator
-    # needs to run at usable speed.
-    runs-on: ubuntu-latest
+    # Pinned to 22.04: ubuntu-latest is now 24.04, where the Android emulator
+    # routinely fails to boot at all. This job is slow enough without also
+    # being flaky.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -115,7 +116,13 @@ jobs:
           api-level: 33
           target: google_apis
           arch: x86_64
+          profile: pixel_2
           disable-animations: true
+          emulator-boot-timeout: 900
+          # Headless flags: without -no-window the emulator waits on a display
+          # that CI does not have. -gpu swiftshader_indirect is the software
+          # renderer, since the runner has no GPU.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: platforms/android
           script: ./gradlew :feedback:connectedDebugAndroidTest --no-daemon
 
