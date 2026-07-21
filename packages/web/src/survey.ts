@@ -7,7 +7,7 @@ import {
   type AnswerValue,
   type Question,
   type Study,
-} from '@markerio-usa/core';
+} from '@susa/signals-core';
 
 const Z_INDEX = 2147482500; // below the annotation overlay, above host-app chrome
 
@@ -44,7 +44,7 @@ export class SurveyRunner {
     if (problems.length > 0) {
       // Loudly, at integration time — better than rendering a broken question
       // to a real user.
-      console.error(`[markerio] invalid study "${this.study.id}":\n  ${problems.join('\n  ')}`);
+      console.error(`[susa] invalid study "${this.study.id}":\n  ${problems.join('\n  ')}`);
       return Promise.resolve(null);
     }
 
@@ -89,7 +89,7 @@ export class SurveyRunner {
 
   private build(): void {
     const root = document.createElement('div');
-    root.className = 'mio-survey';
+    root.className = 'susa-survey';
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-label', this.study.name);
     root.attachShadow({ mode: 'open' });

@@ -18,7 +18,7 @@ jobs:
         image: postgres:17
         env:
           POSTGRES_PASSWORD: test
-          POSTGRES_DB: markerio_core_test
+          POSTGRES_DB: susa_signals_test
         ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready --health-interval 10s
@@ -47,8 +47,8 @@ jobs:
 
       - name: Database integration tests
         env:
-          TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/markerio_core_test
-        run: npm run test --workspace @markerio-usa/ingest
+          TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/susa_signals_test
+        run: npm run test --workspace @susa/signals-ingest
 
       - name: Privacy tests
         # These assert that masking redacts before bytes leave the browser.
@@ -72,17 +72,17 @@ jobs:
 
       - name: Unit tests
         working-directory: platforms/android
-        run: ./gradlew :feedback:testDebugUnitTest --no-daemon
+        run: ./gradlew :signals:testDebugUnitTest --no-daemon
 
       - name: Assemble release AAR
         working-directory: platforms/android
-        run: ./gradlew :feedback:assembleRelease --no-daemon
+        run: ./gradlew :signals:assembleRelease --no-daemon
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-test-results
-          path: platforms/android/feedback/build/reports/tests/
+          path: platforms/android/signals/build/reports/tests/
 
   android-emulator:
     name: Android (instrumented tests)
@@ -124,13 +124,13 @@ jobs:
           # renderer, since the runner has no GPU.
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: platforms/android
-          script: ./gradlew :feedback:connectedDebugAndroidTest --no-daemon
+          script: ./gradlew :signals:connectedDebugAndroidTest --no-daemon
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-instrumented-results
-          path: platforms/android/feedback/build/outputs/androidTest-results/
+          path: platforms/android/signals/build/outputs/androidTest-results/
 
   ios:
     name: iOS (build + unit tests)
@@ -185,7 +185,7 @@ jobs:
       - name: Test on iOS Simulator
         run: |
           set -o pipefail
-          xcodebuild test             -scheme Feedback             -destination "id=${{ steps.sim.outputs.udid }}"             | tee /tmp/xcodebuild.log
+          xcodebuild test             -scheme SusaSignals             -destination "id=${{ steps.sim.outputs.udid }}"             | tee /tmp/xcodebuild.log
 
       # Guards the regression above. If the build silently retargets macOS the
       # UIKit sources vanish, taking the suite that proves redaction works with

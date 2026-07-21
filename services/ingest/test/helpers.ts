@@ -14,7 +14,7 @@ import type { ReplayChunk, Submission } from '../src/validate.js';
  */
 export function testPool(): Pool {
   const connectionString =
-    process.env.TEST_DATABASE_URL ?? connectionStringFromEnv('markerio_core_test');
+    process.env.TEST_DATABASE_URL ?? connectionStringFromEnv('susa_signals_test');
   return createPool({ connectionString, max: 5 });
 }
 

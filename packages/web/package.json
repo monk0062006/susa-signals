@@ -1,5 +1,5 @@
 {
-  "name": "@markerio-usa/browser",
+  "name": "@susa/signals",
   "version": "0.0.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,14 +19,14 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@markerio-usa/core": "*",
+    "@susa/signals-core": "*",
     "html2canvas": "^1.4.1",
     "rrweb": "^2.1.0"
   },
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/monk0062006/markerio-usa-core.git",
+    "url": "git+https://github.com/monk0062006/susa-signals.git",
     "directory": "packages/web"
   },
   "publishConfig": {

@@ -37,7 +37,7 @@ export function createPool(options: PoolOptions): pg.Pool {
   return pool;
 }
 
-export function connectionStringFromEnv(fallbackDatabase = 'markerio_core'): string {
+export function connectionStringFromEnv(fallbackDatabase = 'susa_signals'): string {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
 
   const host = process.env.PGHOST ?? 'localhost';

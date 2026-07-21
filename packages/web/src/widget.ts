@@ -10,7 +10,7 @@ import {
   type Reporter,
   type Study,
   type Submission,
-} from '@markerio-usa/core';
+} from '@susa/signals-core';
 import { WebPlatformAdapter, prefetchScreenshotEngine } from './adapter.js';
 import { WebInstrumentation } from './instrument.js';
 import { AnnotationOverlay } from './overlay.js';
@@ -100,7 +100,7 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
   if (!options.endpoint) throw new Error('loadWidget requires an `endpoint`');
 
   const log = (msg: string): void => {
-    if (!options.silent) console.info(`[markerio] ${msg}`);
+    if (!options.silent) console.info(`[susa] ${msg}`);
   };
 
   const instrumentation = new WebInstrumentation();

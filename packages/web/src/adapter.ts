@@ -6,7 +6,7 @@ import type {
   LogEntry,
   NetworkEntry,
   PlatformAdapter,
-} from '@markerio-usa/core';
+} from '@susa/signals-core';
 import type { WebInstrumentation } from './instrument.js';
 
 const SDK_VERSION = '0.0.0';

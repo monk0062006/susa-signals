@@ -11,7 +11,7 @@ import PackageDescription
  the package resolvable.
  */
 let package = Package(
-    name: "Feedback",
+    name: "SusaSignals",
     platforms: [
         // UIGraphicsImageRenderer needs iOS 10; 13 is the realistic floor for
         // anything shipping today. Raising it is a compatibility decision, not
@@ -19,17 +19,17 @@ let package = Package(
         .iOS(.v13)
     ],
     products: [
-        .library(name: "Feedback", targets: ["Feedback"])
+        .library(name: "SusaSignals", targets: ["SusaSignals"])
     ],
     targets: [
         // No third-party dependencies, for the same reason as Android: this
         // library is embedded in other companies' apps, and a version conflict
         // caused by an SDK is debugged by the customer.
-        .target(name: "Feedback", path: "platforms/ios/Sources/Feedback"),
+        .target(name: "SusaSignals", path: "platforms/ios/Sources/SusaSignals"),
         .testTarget(
-            name: "FeedbackTests",
-            dependencies: ["Feedback"],
-            path: "platforms/ios/Tests/FeedbackTests"
+            name: "SusaSignalsTests",
+            dependencies: ["SusaSignals"],
+            path: "platforms/ios/Tests/SusaSignalsTests"
         )
     ]
 )

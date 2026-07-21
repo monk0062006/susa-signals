@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "feedback-sdk-android"
-include(":feedback")
+rootProject.name = "susa-signals-android"
+include(":signals")

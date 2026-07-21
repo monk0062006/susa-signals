@@ -1,4 +1,4 @@
-import type { LogEntry, LogLevel, NetworkEntry } from '@markerio-usa/core';
+import type { LogEntry, LogLevel, NetworkEntry } from '@susa/signals-core';
 
 const MAX_LOGS = 100;
 const MAX_REQUESTS = 50;

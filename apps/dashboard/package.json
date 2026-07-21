@@ -1,5 +1,5 @@
 {
-  "name": "@markerio-usa/dashboard",
+  "name": "@susa/signals-dashboard",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,6 +9,6 @@
   },
   "dependencies": {
     "rrweb": "^2.1.0",
-    "@markerio-usa/core": "*"
+    "@susa/signals-core": "*"
   }
 }

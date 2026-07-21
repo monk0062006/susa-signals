@@ -14,13 +14,13 @@ SERIAL="${ANDROID_SERIAL:-$(adb devices | awk 'NR>1 && $2=="device" {print $1; e
 [ -n "$SERIAL" ] || { echo "no device connected"; exit 1; }
 
 cd "$(dirname "$0")"
-./gradlew :feedback:assembleDebug :feedback:assembleDebugAndroidTest --no-daemon -q
+./gradlew :signals:assembleDebug :signals:assembleDebugAndroidTest --no-daemon -q
 
-adb -s "$SERIAL" install -r -t feedback/build/outputs/apk/debug/feedback-debug.apk >/dev/null 2>&1 || true
-adb -s "$SERIAL" install -r -t feedback/build/outputs/apk/androidTest/debug/feedback-debug-androidTest.apk >/dev/null
+adb -s "$SERIAL" install -r -t signals/build/outputs/apk/debug/feedback-debug.apk >/dev/null 2>&1 || true
+adb -s "$SERIAL" install -r -t signals/build/outputs/apk/androidTest/debug/feedback-debug-androidTest.apk >/dev/null
 
 # Lets the end-to-end analytics test reach an ingest service on this machine.
 adb -s "$SERIAL" reverse tcp:4000 tcp:4000 >/dev/null 2>&1 || true
 
 adb -s "$SERIAL" shell am instrument -w \
-  io.markerusa.feedback.test/androidx.test.runner.AndroidJUnitRunner
+  com.susatest.signals.test/androidx.test.runner.AndroidJUnitRunner

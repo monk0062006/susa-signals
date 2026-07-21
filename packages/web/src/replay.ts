@@ -3,7 +3,7 @@ import {
   type IngestClient,
   type ReplayChunk,
   uuid,
-} from '@markerio-usa/core';
+} from '@susa/signals-core';
 /**
  * rrweb is the single largest dependency in this SDK, and session replay is
  * opt-in twice over: the host app must enable it AND the user must have granted
@@ -63,7 +63,7 @@ export interface ReplayOptions {
 const DEFAULT_MASK_SELECTORS = [
   '[data-private]',
   '[data-sensitive]',
-  '.markerio-mask',
+  '.susa-mask',
   // Common field names across form libraries.
   'input[type="password"]',
   'input[name*="card" i]',

@@ -3,7 +3,7 @@ import { IngestError } from './client.js';
 import type { KeyValueStore } from './platform.js';
 import type { Submission } from './types.js';
 
-const STORAGE_KEY = 'markerio.queue.v1';
+const STORAGE_KEY = 'susa.signals.queue.v1';
 const MAX_QUEUED = 20;
 const MAX_ATTEMPTS = 8;
 const BASE_BACKOFF_MS = 30_000;

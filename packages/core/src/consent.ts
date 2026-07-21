@@ -34,7 +34,7 @@ export interface ConsentRecord {
   source: 'explicit_prompt' | 'host_app';
 }
 
-const STORAGE_KEY = 'markerio.consent.v1';
+const STORAGE_KEY = 'susa.signals.consent.v1';
 
 export class ConsentManager {
   private cached: ConsentRecord | null = null;

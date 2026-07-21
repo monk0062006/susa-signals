@@ -15,7 +15,7 @@ import {
 } from './ui.js';
 
 const DEFAULT_PROJECT = 'proj_demo';
-const PROJECT_KEY = 'markerio.dashboard.project';
+const PROJECT_KEY = 'susa.signals.dashboard.project';
 
 // Same origin: the dashboard is served by the ingest service itself.
 const api = new Api('', localStorage.getItem(PROJECT_KEY) ?? DEFAULT_PROJECT);

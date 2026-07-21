@@ -42,7 +42,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 async function inPanel(page, selector, action = 'click') {
   return page.evaluate(
     (sel, act) => {
-      const host = document.querySelector('.mio-survey');
+      const host = document.querySelector('.susa-survey');
       const node = host?.shadowRoot?.querySelector(sel);
       if (!node) return false;
       if (act === 'click') node.click();
@@ -111,7 +111,7 @@ try {
   await page.evaluate((id) => {
     void window.__demo.widget.showSurveyById(id);
   }, STUDY_ID);
-  await page.waitForSelector('.mio-survey', { timeout: 8000 });
+  await page.waitForSelector('.susa-survey', { timeout: 8000 });
   check('survey panel appears', true);
 
   const prompt = await inPanel(page, '.prompt', 'text');
@@ -119,7 +119,7 @@ try {
 
   // Required question: Next must be blocked until answered.
   const blocked = await page.evaluate(() => {
-    const host = document.querySelector('.mio-survey');
+    const host = document.querySelector('.susa-survey');
     return host?.shadowRoot?.querySelector('[data-next]')?.disabled;
   });
   check('required question blocks Next until answered', blocked === true);
@@ -127,13 +127,13 @@ try {
   console.log('\nAnswering');
   // NPS row is 0..10, so index 9 is a score of 9 — a promoter.
   await page.evaluate(() => {
-    const host = document.querySelector('.mio-survey');
+    const host = document.querySelector('.susa-survey');
     host?.shadowRoot?.querySelectorAll('.scale__btn')[9]?.click();
   });
   await pause(150);
 
   const unblocked = await page.evaluate(() => {
-    const host = document.querySelector('.mio-survey');
+    const host = document.querySelector('.susa-survey');
     return host?.shadowRoot?.querySelector('[data-next]')?.disabled;
   });
   check('answering unblocks Next', unblocked === false);
@@ -145,7 +145,7 @@ try {
   check('advances to the second question', String(second).includes('got in your way'), String(second));
 
   await page.evaluate(() => {
-    const host = document.querySelector('.mio-survey');
+    const host = document.querySelector('.susa-survey');
     const choices = host?.shadowRoot?.querySelectorAll('.choice');
     for (const choice of choices ?? []) {
       if (choice.textContent?.includes('Payment failed')) choice.click();
@@ -156,7 +156,7 @@ try {
   await pause(250);
 
   await page.evaluate(() => {
-    const host = document.querySelector('.mio-survey');
+    const host = document.querySelector('.susa-survey');
     const textarea = host?.shadowRoot?.querySelector('.text');
     if (textarea) {
       textarea.value = 'The pay button stopped responding after a decline.';
@@ -200,9 +200,9 @@ try {
   await page.evaluate((id) => {
     void window.__demo.widget.showSurveyById(id);
   }, STUDY_ID);
-  await page.waitForSelector('.mio-survey', { timeout: 8000 });
+  await page.waitForSelector('.susa-survey', { timeout: 8000 });
   await page.evaluate(() => {
-    const host = document.querySelector('.mio-survey');
+    const host = document.querySelector('.susa-survey');
     host?.shadowRoot?.querySelectorAll('.scale__btn')[2]?.click();
   });
   await pause(150);

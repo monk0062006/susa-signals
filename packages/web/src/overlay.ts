@@ -1,4 +1,4 @@
-import type { Annotation, CaptureDraft, ImageData as CaptureImage, Point } from '@markerio-usa/core';
+import type { Annotation, CaptureDraft, ImageData as CaptureImage, Point } from '@susa/signals-core';
 
 export type Tool = Annotation['type'];
 
