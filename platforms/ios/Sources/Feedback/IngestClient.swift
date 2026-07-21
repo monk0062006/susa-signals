@@ -51,6 +51,12 @@ public final class IngestClient: SubmissionTransport {
         try post(path: "/v1/replay/chunks", body: chunkJSON, extraHeaders: [:])
     }
 
+    /// Ships a batch of analytics events. One request per batch, never per
+    /// event: analytics volume is orders of magnitude above reports.
+    public func sendEvents(_ batchJSON: Data) throws {
+        try post(path: "/v1/events", body: batchJSON, extraHeaders: [:])
+    }
+
     private func post(path: String, body: Data, extraHeaders: [String: String]) throws {
         guard let url = URL(string: endpoint + path) else {
             throw IngestError(message: "Invalid endpoint", status: nil, retryable: false)

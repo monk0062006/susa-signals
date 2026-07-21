@@ -53,6 +53,17 @@ class FeedbackSdk private constructor(
      * called AND consent exists — constructing it costs nothing and starts
      * nothing.
      */
+    /**
+     * Product analytics. Batches in memory and never touches the outbox — see
+     * Analytics for why events and reports must not share a queue.
+     */
+    private val analytics: Analytics = Analytics(
+        transport = HttpEventTransport(config.projectId, client),
+        consent = consent,
+        device = { DeviceInfo.collect(context, SDK_VERSION, null) },
+        log = ::log,
+    )
+
     private val replay: FrameRecorder = FrameRecorder(
         consent = consent,
         uploader = HttpFrameUploader(config.endpoint, config.projectId, client),
@@ -103,6 +114,8 @@ class FeedbackSdk private constructor(
             consent.grant(listOf(ConsentScope.SCREENSHOT, ConsentScope.DIAGNOSTICS), "host_app")
         }
 
+        analytics.start()
+
         // Deliver anything stranded by a previous process's network failure.
         worker.execute {
             val result = queue.flush()
@@ -114,6 +127,26 @@ class FeedbackSdk private constructor(
 
     fun setCustomData(data: Map<String, String>) { customData = data }
 
+    /**
+     * Records a product analytics event.
+     *
+     * Buffered and batched, never persisted to the outbox: events are
+     * high-volume and individually disposable, and sharing storage with reports
+     * would evict the reports.
+     */
+    fun track(event: String, properties: Map<String, String> = emptyMap()) =
+        analytics.track(event, properties)
+
+    /** Associates subsequent events with a person. */
+    fun identify(user: Reporter) = analytics.identify(user)
+
+    fun identify(userId: String) = analytics.identify(userId)
+
+    /** Sends buffered events immediately. Returns how many were delivered. */
+    fun flushEvents(onComplete: (Int) -> Unit = {}) {
+        worker.execute { onComplete(analytics.flush()) }
+    }
+
     fun grantConsent(scopes: List<ConsentScope>) {
         consent.grant(scopes, "explicit_prompt")
         log("consent granted: ${scopes.joinToString(",") { it.wire }}")
@@ -121,8 +154,9 @@ class FeedbackSdk private constructor(
 
     fun revokeConsent() {
         consent.revoke()
-        // Withdrawal is immediate: buffered frames are discarded, not sent.
+        // Withdrawal is immediate: buffered data is discarded, not sent.
         replay.abandon()
+        analytics.discard()
         log("consent revoked")
     }
 

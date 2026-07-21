@@ -11,7 +11,14 @@ package io.markerusa.feedback
 enum class ConsentScope(val wire: String) {
     SCREENSHOT("screenshot"),
     DIAGNOSTICS("diagnostics"),
-    SESSION_REPLAY("session_replay")
+    SESSION_REPLAY("session_replay"),
+
+    /**
+     * Product analytics. A separate legal basis from diagnostics under GDPR and
+     * ePrivacy, so it cannot ride on the implicit consent that filing a report
+     * carries.
+     */
+    ANALYTICS("analytics")
 }
 
 data class ConsentRecord(

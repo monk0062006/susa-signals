@@ -44,6 +44,16 @@ class IngestClient(
         post("/v1/replay/chunks", chunkJson, emptyMap())
     }
 
+    /**
+     * Ships a batch of analytics events.
+     *
+     * One request per batch, never per event: analytics volume is orders of
+     * magnitude above reports, and a request each would swamp the device radio.
+     */
+    fun sendEvents(batchJson: String) {
+        post("/v1/events", batchJson, emptyMap())
+    }
+
     private fun post(path: String, body: String, extraHeaders: Map<String, String>) {
         var connection: HttpURLConnection? = null
         try {

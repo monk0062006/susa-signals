@@ -43,6 +43,10 @@ public final class FeedbackSDK {
     private let client: IngestClient
     private let worker = DispatchQueue(label: "io.markerusa.feedback", qos: .utility)
 
+    /// Batches in memory and never touches the outbox — see Analytics for why
+    /// events and reports must not share a queue.
+    private let analytics: Analytics
+
     private var reporter: Reporter?
     private var customData: [String: String]?
     /// Guards against a second composer opening over a live one.
@@ -81,8 +85,14 @@ public final class FeedbackSDK {
         let storage = UserDefaultsStore()
         let client = IngestClient(endpoint: config.endpoint, projectId: config.projectId)
         self.client = client
-        self.consent = ConsentManager(storage: storage, policyVersion: consentPolicyVersion)
+        let consentManager = ConsentManager(storage: storage, policyVersion: consentPolicyVersion)
+        self.consent = consentManager
         self.queue = SubmissionQueue(storage: storage, client: client)
+        self.analytics = Analytics(
+            transport: HTTPEventTransport(projectId: config.projectId, client: client),
+            consent: consentManager,
+            device: { DeviceInfo.collect(sdkVersion: sdkVersion, route: nil) }
+        )
     }
 
     private func onInit() {
@@ -92,6 +102,8 @@ public final class FeedbackSDK {
         if consent.load() == nil {
             consent.grant([.screenshot, .diagnostics], source: "host_app")
         }
+
+        analytics.start()
 
         // Deliver anything stranded by a previous launch's network failure.
         worker.async { [weak self] in
@@ -112,7 +124,32 @@ public final class FeedbackSDK {
 
     public func revokeConsent() {
         consent.revoke()
+        // Withdrawal is immediate: buffered events are discarded, not sent.
+        analytics.discard()
         log("consent revoked")
+    }
+
+    /**
+     Records a product analytics event.
+
+     Buffered and batched, never persisted to the outbox: events are high-volume
+     and individually disposable, and sharing storage with reports would evict
+     the reports.
+     */
+    public func track(_ event: String, properties: [String: String]? = nil) {
+        analytics.track(event, properties: properties)
+    }
+
+    /// Associates subsequent events with a person.
+    public func identify(_ user: Reporter) { analytics.identify(user) }
+
+    public func identify(userId: String) { analytics.identify(userId: userId) }
+
+    /// Sends buffered events immediately. Returns how many were delivered.
+    public func flushEvents(completion: @escaping (Int) -> Void = { _ in }) {
+        worker.async { [weak self] in
+            completion(self?.analytics.flush() ?? 0)
+        }
     }
 
     #if canImport(UIKit)

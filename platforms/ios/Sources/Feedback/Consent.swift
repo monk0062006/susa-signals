@@ -12,6 +12,9 @@ public enum ConsentScope: String, Codable, CaseIterable {
     case screenshot
     case diagnostics
     case sessionReplay = "session_replay"
+    /// A separate legal basis from diagnostics under GDPR and ePrivacy, so it
+    /// cannot ride on the implicit consent that filing a report carries.
+    case analytics
 }
 
 public struct ConsentRecord: Codable, Equatable {

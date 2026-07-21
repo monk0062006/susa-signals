@@ -193,6 +193,9 @@ private fun JsonWriter.ObjectScope.writeAnnotation(annotation: Annotation) {
     }
 }
 
+/** Shared by submissions and analytics batches, so one device shape exists. */
+internal fun JsonWriter.ObjectScope.writeDeviceContext(device: DeviceContext) = writeDevice(device)
+
 private fun JsonWriter.ObjectScope.writeDevice(device: DeviceContext) {
     str("platform", device.platform.wire)
     str("sdkVersion", device.sdkVersion)
