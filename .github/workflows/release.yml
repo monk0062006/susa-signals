@@ -19,6 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Required by `npm publish --provenance`. Provenance signs an attestation
+      # linking the tarball to this commit and this workflow, so a consumer can
+      # verify what they installed was built from the source it claims. Without
+      # this permission npm fails the publish rather than silently skipping it.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
