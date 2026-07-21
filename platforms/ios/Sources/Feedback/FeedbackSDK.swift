@@ -57,6 +57,8 @@ public final class FeedbackSDK {
     private var customData: [String: String]?
     /// Guards against a second composer opening over a live one.
     private var overlayVisible = false
+    /// Guards against a second survey sheet opening over a live one.
+    private var surveyOpen = false
 
     private static var instance: FeedbackSDK?
     private static let lock = NSLock()
@@ -165,6 +167,59 @@ public final class FeedbackSDK {
     public func identify(userId: String) { analytics.identify(userId: userId) }
 
     #if canImport(UIKit)
+    /**
+     Presents a research survey and submits whatever was collected.
+
+     The counterpart to web's `showSurvey` and Android's. Must be called on the
+     main thread — it builds views.
+
+     `completion` receives true if anything was collected, including a partial
+     response from someone who answered two questions and dismissed. Discarding
+     partials would bias results toward people with time to finish.
+     */
+    public func showSurvey(
+        _ study: Study,
+        route: String? = nil,
+        completion: @escaping (Bool) -> Void = { _ in }
+    ) {
+        // A second sheet over a live one would split the response in two.
+        guard !surveyOpen else {
+            log("survey ignored: one is already open")
+            return
+        }
+
+        guard let window = ScreenCapture.activeWindow() else {
+            log("survey skipped: no active window")
+            completion(false)
+            return
+        }
+
+        surveyOpen = true
+        let panel = SurveyPanel(
+            study: study,
+            onDone: { [weak self] answers, completed, durationMs in
+                guard let self else { return }
+                self.surveyOpen = false
+                self.submitResearchResponse(
+                    studyId: study.id,
+                    answers: answers,
+                    completed: completed,
+                    durationMs: durationMs,
+                    route: route
+                )
+                self.log("survey \(study.id) \(completed ? "completed" : "partial") (\(answers.count) answer(s))")
+                completion(true)
+            },
+            onDismiss: { [weak self] in
+                self?.surveyOpen = false
+                self?.log("survey \(study.id) dismissed without answers")
+                completion(false)
+            }
+        )
+
+        if !panel.present(in: window) { surveyOpen = false }
+    }
+
     /// Starts session replay if consent allows. Returns the session id, or nil.
     ///
     /// Callers should stop it when the app backgrounds — a recorder capturing a

@@ -122,13 +122,48 @@ extension Annotation: Encodable {
     }
 }
 
-public struct Answer: Codable, Equatable {
+/**
+ One answer.
+
+ `values` exists because multi-choice must serialize as a JSON array, matching
+ web and Android. Comma-joining into `value` would look correct on the wire and
+ then aggregate to zero: the dashboard counts by matching exact option strings,
+ so "Payment failed, Confusing pricing" matches neither option.
+ */
+public struct Answer: Equatable {
     public let questionId: String
-    public let value: String
+    public let value: String?
+    public let values: [String]?
 
     public init(questionId: String, value: String) {
         self.questionId = questionId
         self.value = value
+        self.values = nil
+    }
+
+    public init(questionId: String, values: [String]) {
+        self.questionId = questionId
+        self.value = nil
+        self.values = values
+    }
+}
+
+extension Answer: Encodable {
+    private enum CodingKeys: String, CodingKey {
+        case questionId, value
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(questionId, forKey: .questionId)
+
+        // One key on the wire, two shapes: a string for single answers, an array
+        // for multi-choice. Matches how web serializes AnswerValue.
+        if let values {
+            try container.encode(values, forKey: .value)
+        } else {
+            try container.encode(value ?? "", forKey: .value)
+        }
     }
 }
 
