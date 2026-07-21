@@ -178,6 +178,22 @@ public final class FeedbackSDK {
     public func currentSessionId() -> String? { replay.currentSessionId() }
     #endif
 
+    /**
+     The replay session a report should be linked to, or nil.
+
+     A helper rather than a direct `replay.currentSessionId()` call because the
+     submit path is shared across platforms while the recorder exists only where
+     UIKit does — referencing it inline broke the macOS build while the
+     simulator build stayed green.
+     */
+    private func activeReplaySession() -> String? {
+        #if canImport(UIKit)
+        return replay.currentSessionId()
+        #else
+        return nil
+        #endif
+    }
+
     /// Sends buffered events immediately. Returns how many were delivered.
     public func flushEvents(completion: @escaping (Int) -> Void = { _ in }) {
         worker.async { [weak self] in
@@ -318,7 +334,7 @@ public final class FeedbackSDK {
                 reporter: self.reporter,
                 attachments: attachments,
                 customData: self.customData,
-                sessionId: self.replay.currentSessionId(),
+                sessionId: self.activeReplaySession(),
                 consent: self.consent.load()
             )
 
