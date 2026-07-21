@@ -32,6 +32,7 @@ export async function setupSchema(pool: Pool): Promise<void> {
 export async function truncateAll(pool: Pool): Promise<void> {
   await pool.query(`
     TRUNCATE
+      feedback.audit_log,
       feedback.replay_chunks,
       feedback.replay_sessions,
       feedback.attachments,

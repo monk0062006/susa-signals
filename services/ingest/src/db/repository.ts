@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { ReplayChunk, Submission } from '../validate.js';
+import { NoEncryption, PLAINTEXT_KEY_ID, type Encryptor } from './encryption.js';
 
 export interface StoredSubmission extends Submission {
   attachments: StoredAttachment[];
@@ -39,7 +40,15 @@ export interface Page<T> {
  * kind of corruption that only shows up as a confusing dashboard weeks later.
  */
 export class Repository {
-  constructor(private readonly pool: Pool) {}
+  constructor(
+    private readonly pool: Pool,
+    /**
+     * Encrypts attachment bytes and replay events at rest. Defaults to a no-op
+     * so an existing deployment upgrades without key material, and so local
+     * development needs none.
+     */
+    private readonly crypto: Encryptor = new NoEncryption(),
+  ) {}
 
   // --- projects -------------------------------------------------------------
 
@@ -249,11 +258,16 @@ export class Repository {
   }): Promise<void> {
     await this.transaction(async (client) => {
       await this.ensureProject(input.projectId, client);
+      // byte_size records the PLAINTEXT length. The dashboard shows it to a
+      // human, and "how big is this screenshot" should not change because the
+      // storage layer added a 28-byte envelope.
+      const sealed = this.crypto.encrypt(input.bytes);
+
       await client.query(
         `
         INSERT INTO feedback.attachments
-          (id, project_id, kind, mime_type, byte_size, width, height, bytes)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          (id, project_id, kind, mime_type, byte_size, width, height, bytes, encryption_key_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
         `,
         [
           input.id,
@@ -263,7 +277,8 @@ export class Repository {
           input.bytes.byteLength,
           input.width ?? null,
           input.height ?? null,
-          input.bytes,
+          sealed.bytes,
+          sealed.keyId,
         ],
       );
     });
@@ -273,13 +288,26 @@ export class Repository {
     projectId: string,
     id: string,
   ): Promise<{ bytes: Buffer; mimeType: string } | null> {
-    const { rows } = await this.pool.query<{ bytes: Buffer; mime_type: string }>(
-      `SELECT bytes, mime_type FROM feedback.attachments WHERE id = $1 AND project_id = $2`,
+    const { rows } = await this.pool.query<{
+      bytes: Buffer;
+      mime_type: string;
+      encryption_key_id: string;
+    }>(
+      `SELECT bytes, mime_type, encryption_key_id FROM feedback.attachments
+        WHERE id = $1 AND project_id = $2`,
       [id, projectId],
     );
 
     const row = rows[0];
-    return row ? { bytes: row.bytes, mimeType: row.mime_type } : null;
+    if (!row) return null;
+
+    const plaintext = this.crypto.decrypt(row.bytes, row.encryption_key_id);
+    // null means the key is missing or the ciphertext failed authentication.
+    // Surfacing that as "not found" is correct: there is nothing servable, and
+    // returning undecrypted bytes to a browser would be worse than a 404.
+    if (!plaintext) return null;
+
+    return { bytes: plaintext, mimeType: row.mime_type };
   }
 
   // --- replay ---------------------------------------------------------------
@@ -306,20 +334,30 @@ export class Repository {
 
       const eventsJson = JSON.stringify(chunk.events);
 
+      // Replay events are a recording of the user's screen — on web literally
+      // the DOM, on native a reference to frame images. They belong under the
+      // same protection as the screenshots themselves.
+      const sealed = this.crypto.enabled
+        ? this.crypto.encrypt(Buffer.from(eventsJson, 'utf8'))
+        : null;
+
       const inserted = await client.query(
         `
         INSERT INTO feedback.replay_chunks
-          (session_id, seq, events, started_at, ended_at, final)
-        VALUES ($1, $2, $3::jsonb,
-                to_timestamp($4::double precision / 1000),
-                to_timestamp($5::double precision / 1000),
-                $6)
+          (session_id, seq, events, events_encrypted, encryption_key_id,
+           started_at, ended_at, final)
+        VALUES ($1, $2, $3::jsonb, $4, $5,
+                to_timestamp($6::double precision / 1000),
+                to_timestamp($7::double precision / 1000),
+                $8)
         ON CONFLICT (session_id, seq) DO NOTHING
         `,
         [
           chunk.sessionId,
           chunk.seq,
-          eventsJson,
+          sealed ? null : eventsJson,
+          sealed ? sealed.bytes : null,
+          sealed ? sealed.keyId : PLAINTEXT_KEY_ID,
           chunk.startedAt,
           chunk.endedAt,
           chunk.final,
@@ -369,9 +407,13 @@ export class Repository {
     );
     if (sessionRows.length === 0) return null;
 
-    const { rows } = await this.pool.query<{ events: unknown[] }>(
+    const { rows } = await this.pool.query<{
+      events: unknown[] | null;
+      events_encrypted: Buffer | null;
+      encryption_key_id: string;
+    }>(
       `
-      SELECT events
+      SELECT events, events_encrypted, encryption_key_id
         FROM feedback.replay_chunks
        WHERE session_id = $1
        ORDER BY seq ASC
@@ -381,8 +423,26 @@ export class Repository {
 
     if (rows.length === 0) return null;
 
+    const events: unknown[] = [];
+    for (const row of rows) {
+      if (row.events_encrypted) {
+        const plaintext = this.crypto.decrypt(row.events_encrypted, row.encryption_key_id);
+        // A chunk that cannot be decrypted is skipped rather than failing the
+        // whole session: a recording with a gap is still worth watching, and a
+        // rotated-away key should not make every older session unplayable.
+        if (!plaintext) continue;
+        try {
+          events.push(...(JSON.parse(plaintext.toString('utf8')) as unknown[]));
+        } catch {
+          continue;
+        }
+      } else if (row.events) {
+        events.push(...row.events);
+      }
+    }
+
     return {
-      events: rows.flatMap((row) => row.events),
+      events,
       chunks: rows.length,
       final: sessionRows[0]?.complete ?? false,
     };

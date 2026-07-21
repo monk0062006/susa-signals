@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import multer from 'multer';
 import type { Pool } from 'pg';
+import { AuditLog } from './db/audit.js';
+import { encryptorFromEnv, type Encryptor } from './db/encryption.js';
 import { Events, parseEventBatch } from './db/events.js';
 import { Repository } from './db/repository.js';
 import { Retention } from './db/retention.js';
@@ -38,6 +40,17 @@ export interface AppOptions {
    * product already rate limits upstream.
    */
   rateLimits?: RateLimitConfig | false;
+  /**
+   * Encrypts attachments and replay events at rest. Defaults to reading
+   * SIGNALS_ENCRYPTION_KEY from the environment, and to no-op when unset so an
+   * existing deployment upgrades without key material.
+   */
+  encryptor?: Encryptor;
+  /**
+   * Identifies the human behind a request, for the audit trail. The host
+   * product owns identity, so it supplies this — usually from its own session.
+   */
+  actorFor?: (req: express.Request) => string | undefined;
 }
 
 /**
@@ -48,12 +61,22 @@ export interface AppOptions {
  * inside its existing pool, under whatever auth it already has.
  */
 export function createIngestApp(options: AppOptions): express.Express {
-  const repo = new Repository(options.pool);
+  const crypto = options.encryptor ?? encryptorFromEnv();
+  const repo = new Repository(options.pool, crypto);
   const retention = new Retention(options.pool);
   const studies = new Studies(options.pool);
   const events = new Events(options.pool);
 
   const logger = options.logger ?? createLogger();
+  const audit = new AuditLog(options.pool, (message) => logger.warn(message));
+  const actorFor = options.actorFor ?? (() => undefined);
+
+  /** Common audit fields for a request. */
+  const who = (req: express.Request) => ({
+    actor: actorFor(req),
+    requestId: req.requestId,
+    ip: req.ip,
+  });
   const metrics = new Metrics();
   const limiter =
     options.rateLimits === false
@@ -86,7 +109,7 @@ export function createIngestApp(options: AppOptions): express.Express {
       // Touches the database, so this fails when the service is up but its
       // dependency is not — the case a load balancer actually needs to know.
       await options.pool.query('SELECT 1');
-      res.json({ ok: true });
+      res.json({ ok: true, encryptionAtRest: crypto.enabled });
     } catch {
       res.status(503).json({ ok: false, error: 'database unavailable' });
     }
@@ -148,6 +171,15 @@ export function createIngestApp(options: AppOptions): express.Express {
       // be sniffed into an executable type.
       res.setHeader('x-content-type-options', 'nosniff');
       res.setHeader('cache-control', 'private, max-age=3600');
+
+      audit.record({
+        projectId: req.params.projectId,
+        action: 'attachment.read',
+        subjectType: 'attachment',
+        subjectId: req.params.id,
+        ...who(req),
+      });
+
       res.send(blob.bytes);
     } catch (err) {
       handleError(err, res, req);
@@ -230,6 +262,18 @@ export function createIngestApp(options: AppOptions): express.Express {
         res.sendStatus(404);
         return;
       }
+
+      // A replay is a recording of a person. "Which of your staff watched this"
+      // is a question a customer is entitled to have answered.
+      audit.record({
+        projectId: projectId(req),
+        action: 'replay.read',
+        subjectType: 'replay_session',
+        subjectId: req.params.sessionId,
+        detail: { events: session.events.length, chunks: session.chunks },
+        ...who(req),
+      });
+
       res.json(session);
     } catch (err) {
       handleError(err, res, req);
@@ -390,6 +434,21 @@ export function createIngestApp(options: AppOptions): express.Express {
     }
   });
 
+  app.get('/v1/audit', async (req, res) => {
+    try {
+      res.json(
+        await audit.query(projectId(req), {
+          action: typeof req.query.action === 'string' ? req.query.action : undefined,
+          subjectId: typeof req.query.subjectId === 'string' ? req.query.subjectId : undefined,
+          actor: typeof req.query.actor === 'string' ? req.query.actor : undefined,
+          limit: req.query.limit ? Number(req.query.limit) : undefined,
+        }),
+      );
+    } catch (err) {
+      handleError(err, res, req);
+    }
+  });
+
   // --- retention & erasure --------------------------------------------------
 
   app.put('/v1/retention', async (req, res) => {
@@ -436,7 +495,20 @@ export function createIngestApp(options: AppOptions): express.Express {
       if (email) subject.email = email;
       if (externalId) subject.externalId = externalId;
 
-      res.json(await retention.eraseSubject(project, subject));
+      const result = await retention.eraseSubject(project, subject);
+
+      // Erasure is awaited, not fire-and-forget: proving a deletion request was
+      // honoured is the entire point of recording it.
+      await audit.recordSync({
+        projectId: project,
+        action: 'erasure.execute',
+        subjectType: 'data_subject',
+        subjectId: email ?? externalId,
+        detail: result as unknown as Record<string, unknown>,
+        ...who(req),
+      });
+
+      res.json(result);
     } catch (err) {
       handleError(err, res, req);
     }

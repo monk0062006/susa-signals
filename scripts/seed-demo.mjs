@@ -61,7 +61,7 @@ try {
 
   const sessionId = uuid();
   await page.evaluate(async () => {
-    const { ReplayRecorder } = await import('./sdk.js');
+    const { ReplayRecorder } = await import('./sdk/sdk.js');
     const captured = [];
     const fakeClient = { sendReplayChunk: async (chunk) => captured.push(chunk) };
     const consent = { has: async () => true, load: async () => null };
