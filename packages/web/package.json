@@ -23,14 +23,14 @@
     "html2canvas": "^1.4.1",
     "rrweb": "^2.1.0"
   },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/monk0062006/susa-signals.git",
     "directory": "packages/web"
   },
   "publishConfig": {
-    "access": "restricted"
+    "access": "public"
   },
   "engines": {
     "node": ">=20"

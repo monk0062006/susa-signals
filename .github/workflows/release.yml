@@ -1,0 +1,174 @@
+name: release
+
+# Publishing is tag-driven, never branch-driven. A merge to main should not be
+# able to push a version to a registry that can never be unpublished.
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# Swift Package Manager needs no job here: SPM has no registry, so the tag this
+# workflow reacts to *is* the Swift release.
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Two independent registries. Neither should be able to block the other, and a
+# failure in one must not leave the other half-published silently.
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Reject anything that is not a plain semver. A malformed tag would
+          # otherwise publish a garbage version that cannot be unpublished
+          # after 72 hours.
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag '$GITHUB_REF_NAME' is not semver"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+
+      - name: Set workspace versions
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          npm version "$VERSION" --workspaces --no-git-tag-version --allow-same-version
+
+          # npm publishes a "*" dependency literally — it does NOT rewrite it the
+          # way pnpm rewrites workspace:*. Left alone, every install of
+          # @susa/signals would resolve @susa/signals-core to whatever is newest,
+          # including a future breaking major. Pin it to exactly what we ship.
+          node -e '
+            const fs = require("fs");
+            const p = "packages/web/package.json";
+            const pkg = JSON.parse(fs.readFileSync(p, "utf8"));
+            pkg.dependencies["@susa/signals-core"] = process.env.VERSION;
+            fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + "\n");
+          '
+
+      - run: npm run build --workspaces --if-present
+
+      - name: Verify the tarball contains built output
+        run: |
+          set -euo pipefail
+          # `files: ["dist"]` silently ships an empty package if the build did not
+          # run. A published empty package is worse than a failed release.
+          for pkg in core web; do
+            test -f "packages/$pkg/dist/index.js" \
+              || { echo "::error::packages/$pkg/dist/index.js missing"; exit 1; }
+          done
+
+      # Order matters: web depends on core at the exact pinned version, so core
+      # must exist on the registry first or the web publish resolves nothing.
+      - name: Publish @susa/signals-core
+        run: npm publish --workspace @susa/signals-core --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @susa/signals
+        run: npm publish --workspace @susa/signals --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  maven:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag '$GITHUB_REF_NAME' is not semver"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Stage signed artifacts
+        working-directory: platforms/android
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon \
+            :signals:publishReleasePublicationToStagingRepository \
+            -Pversion="${{ steps.version.outputs.version }}"
+
+      - name: Verify every artifact is signed
+        working-directory: platforms/android
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DIR="signals/build/staging-repo/com/susatest/signals/$VERSION"
+          test -d "$DIR" || { echo "::error::nothing staged at $DIR"; exit 1; }
+
+          # Central rejects an unsigned bundle at validation — long after this
+          # job has already reported success. Catch it here instead, where the
+          # failure points at the cause.
+          missing=0
+          for f in "$DIR"/*.aar "$DIR"/*.jar "$DIR"/*.pom; do
+            [ -e "$f" ] || continue
+            test -f "$f.asc" || { echo "::error::unsigned: $(basename "$f")"; missing=1; }
+          done
+          [ "$missing" -eq 0 ] || exit 1
+
+          # Central also requires sources and javadoc jars specifically.
+          ls "$DIR"/*-sources.jar >/dev/null || { echo "::error::no sources jar"; exit 1; }
+          ls "$DIR"/*-javadoc.jar >/dev/null || { echo "::error::no javadoc jar"; exit 1; }
+
+          echo "staged and signed:"; ls -1 "$DIR"
+
+      - name: Upload bundle to Central
+        working-directory: platforms/android/signals/build/staging-repo
+        env:
+          MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          zip -qr /tmp/bundle.zip com
+
+          # The Portal API takes one bundle rather than the per-artifact PUTs the
+          # retired OSSRH accepted.
+          TOKEN=$(printf '%s:%s' "$MAVEN_USERNAME" "$MAVEN_PASSWORD" | base64 -w0)
+
+          HTTP=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
+            -X POST "https://central.sonatype.com/api/v1/publisher/upload?name=susa-signals-$VERSION" \
+            -H "Authorization: Bearer $TOKEN" \
+            -F "bundle=@/tmp/bundle.zip")
+
+          # curl exits 0 on a 4xx, so the status has to be asserted explicitly or
+          # a rejected upload reads as a successful release.
+          if [ "$HTTP" != "201" ]; then
+            echo "::error::Central upload failed (HTTP $HTTP)"; cat /tmp/resp.txt; exit 1
+          fi
+
+          echo "deployment id: $(cat /tmp/resp.txt)"
+          echo "Validation runs asynchronously — confirm at https://central.sonatype.com/publishing/deployments"
