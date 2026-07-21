@@ -6,7 +6,7 @@ import type {
   LogEntry,
   NetworkEntry,
   PlatformAdapter,
-} from '@susa/signals-core';
+} from '@susatest/signals-core';
 import type { WebInstrumentation } from './instrument.js';
 
 const SDK_VERSION = '0.0.0';

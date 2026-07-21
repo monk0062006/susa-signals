@@ -7,7 +7,7 @@ import {
   type AnswerValue,
   type Question,
   type Study,
-} from '@susa/signals-core';
+} from '@susatest/signals-core';
 
 const Z_INDEX = 2147482500; // below the annotation overlay, above host-app chrome
 

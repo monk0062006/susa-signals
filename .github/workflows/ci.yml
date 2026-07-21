@@ -48,7 +48,7 @@ jobs:
       - name: Database integration tests
         env:
           TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/susa_signals_test
-        run: npm run test --workspace @susa/signals-ingest
+        run: npm run test --workspace @susatest/signals-ingest
 
       - name: Privacy tests
         # These assert that masking redacts before bytes leave the browser.

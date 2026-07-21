@@ -3,7 +3,7 @@ import {
   type IngestClient,
   type ReplayChunk,
   uuid,
-} from '@susa/signals-core';
+} from '@susatest/signals-core';
 /**
  * rrweb is the single largest dependency in this SDK, and session replay is
  * opt-in twice over: the host app must enable it AND the user must have granted

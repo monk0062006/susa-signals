@@ -1,5 +1,5 @@
 {
-  "name": "@susa/signals",
+  "name": "@susatest/signals",
   "version": "0.0.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,7 +19,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@susa/signals-core": "*",
+    "@susatest/signals-core": "*",
     "html2canvas": "^1.4.1",
     "rrweb": "^2.1.0"
   },

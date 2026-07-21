@@ -3,22 +3,22 @@
 Everything below is wired and verified except the final push to a registry,
 which needs credentials this repo deliberately does not contain.
 
-## npm — `@susa/signals-core`, `@susa/signals`
+## npm — `@susatest/signals-core`, `@susatest/signals`
 
 Both are scoped and marked `"access": "restricted"`, so a publish cannot
 accidentally go public.
 
 ```bash
 npm run build                        # emits dist/ for both packages
-npm pack --workspace @susa/signals-core --dry-run   # inspect contents first
-npm publish --workspace @susa/signals-core
-npm publish --workspace @susa/signals
+npm pack --workspace @susatest/signals-core --dry-run   # inspect contents first
+npm publish --workspace @susatest/signals-core
+npm publish --workspace @susatest/signals
 ```
 
 `prepublishOnly` rebuilds, so a stale `dist/` cannot ship.
 
 **Before the first publish:** bump both from `0.0.0`, and decide whether
-`@susa/signals` ships the code-split chunks or a single file. It is
+`@susatest/signals` ships the code-split chunks or a single file. It is
 currently built by consumers' bundlers from `dist/`, so the splitting is theirs
 to do — the chunking in `examples/demo` is a demonstration, not the shipped
 artefact.

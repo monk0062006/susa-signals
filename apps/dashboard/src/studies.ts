@@ -4,7 +4,7 @@ import {
   npsBreakdown,
   type Question,
   type Study,
-} from '@susa/signals-core';
+} from '@susatest/signals-core';
 import { card, h, icons, specGrid } from './ui.js';
 
 export interface StudyResults {
@@ -18,7 +18,7 @@ export interface StudyResults {
 /**
  * Renders a study's aggregated results.
  *
- * Scoring lives in `@susa/signals-core`, not here. NPS bucketing in particular
+ * Scoring lives in `@susatest/signals-core`, not here. NPS bucketing in particular
  * has one correct definition, and re-implementing it in the dashboard would let
  * the number shown to a researcher drift from the number any other consumer
  * computes.

@@ -89,13 +89,13 @@ jobs:
 
           # npm publishes a "*" dependency literally — it does NOT rewrite it the
           # way pnpm rewrites workspace:*. Left alone, every install of
-          # @susa/signals would resolve @susa/signals-core to whatever is newest,
+          # @susatest/signals would resolve @susatest/signals-core to whatever is newest,
           # including a future breaking major. Pin it to exactly what we ship.
           node -e '
             const fs = require("fs");
             const p = "packages/web/package.json";
             const pkg = JSON.parse(fs.readFileSync(p, "utf8"));
-            pkg.dependencies["@susa/signals-core"] = process.env.VERSION;
+            pkg.dependencies["@susatest/signals-core"] = process.env.VERSION;
             fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + "\n");
           '
 
@@ -113,9 +113,9 @@ jobs:
 
       # Order matters: web depends on core at the exact pinned version, so core
       # must exist on the registry first or the web publish resolves nothing.
-      - name: Publish @susa/signals-core
+      - name: Publish @susatest/signals-core
         if: github.event.inputs.dry_run != 'true'
-        run: npm publish --workspace @susa/signals-core --access public --provenance
+        run: npm publish --workspace @susatest/signals-core --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -123,13 +123,13 @@ jobs:
         if: github.event.inputs.dry_run == 'true'
         run: |
           set -euo pipefail
-          npm publish --workspace @susa/signals-core --access public --dry-run
-          npm publish --workspace @susa/signals --access public --dry-run
+          npm publish --workspace @susatest/signals-core --access public --dry-run
+          npm publish --workspace @susatest/signals --access public --dry-run
           echo "::notice::Dry run - nothing was published."
 
-      - name: Publish @susa/signals
+      - name: Publish @susatest/signals
         if: github.event.inputs.dry_run != 'true'
-        run: npm publish --workspace @susa/signals --access public --provenance
+        run: npm publish --workspace @susatest/signals --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

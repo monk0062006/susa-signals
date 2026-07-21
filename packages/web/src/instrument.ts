@@ -1,4 +1,4 @@
-import type { LogEntry, LogLevel, NetworkEntry } from '@susa/signals-core';
+import type { LogEntry, LogLevel, NetworkEntry } from '@susatest/signals-core';
 
 const MAX_LOGS = 100;
 const MAX_REQUESTS = 50;

@@ -151,7 +151,7 @@ product owns those. The core is exported as a factory rather than a server, so i
 mounts inside an app that already has both:
 
 ```ts
-import { createIngestApp, createRetention } from '@susa/signals-ingest/app';
+import { createIngestApp, createRetention } from '@susatest/signals-ingest/app';
 
 // Your pool, your auth, your routes.
 app.use('/feedback', requireAuth, createIngestApp({

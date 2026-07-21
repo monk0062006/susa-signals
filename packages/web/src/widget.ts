@@ -10,7 +10,7 @@ import {
   type Reporter,
   type Study,
   type Submission,
-} from '@susa/signals-core';
+} from '@susatest/signals-core';
 import { WebPlatformAdapter, prefetchScreenshotEngine } from './adapter.js';
 import { WebInstrumentation } from './instrument.js';
 import { AnnotationOverlay } from './overlay.js';
