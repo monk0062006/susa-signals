@@ -86,7 +86,19 @@ sealed class SubmissionPayload {
     ) : SubmissionPayload()
 }
 
-data class Answer(val questionId: String, val value: String)
+/**
+ * One answer.
+ *
+ * `values` exists because multi-choice must serialize as a JSON array, matching
+ * web. Comma-joining into `value` would look correct on the wire and then
+ * aggregate to zero: the dashboard's countChoices matches exact option strings,
+ * so "Payment failed, Confusing pricing" matches neither option.
+ */
+data class Answer(
+    val questionId: String,
+    val value: String? = null,
+    val values: List<String>? = null
+)
 
 data class Submission(
     val id: String = UUID.randomUUID().toString(),
@@ -155,7 +167,7 @@ private fun JsonWriter.ObjectScope.writePayload(payload: SubmissionPayload) {
             str("studyId", payload.studyId)
             array("answers", payload.answers) { a ->
                 str("questionId", a.questionId)
-                str("value", a.value)
+                if (a.values != null) strArray("value", a.values) else str("value", a.value)
             }
             bool("completed", payload.completed)
             num("durationMs", payload.durationMs)

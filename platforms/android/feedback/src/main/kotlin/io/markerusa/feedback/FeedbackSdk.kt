@@ -5,6 +5,8 @@ import android.content.Context
 import android.util.Log
 import io.markerusa.feedback.annotate.FeedbackOverlay
 import io.markerusa.feedback.replay.FrameRecorder
+import io.markerusa.feedback.survey.Study
+import io.markerusa.feedback.survey.SurveyPanel
 import io.markerusa.feedback.replay.HttpFrameUploader
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -47,6 +49,10 @@ class FeedbackSdk private constructor(
     /** Guards against a second composer opening over a live one. */
     @Volatile
     private var overlayVisible = false
+
+    /** Guards against a second survey sheet opening over a live one. */
+    @Volatile
+    private var surveyOpen = false
 
     /**
      * Frame-based session replay. Created eagerly but inert until `start` is
@@ -141,6 +147,46 @@ class FeedbackSdk private constructor(
     fun identify(user: Reporter) = analytics.identify(user)
 
     fun identify(userId: String) = analytics.identify(userId)
+
+    /**
+     * Presents a research survey and submits whatever was collected.
+     *
+     * The counterpart to web's `showSurvey`. Must be called on the main thread —
+     * it inflates views.
+     *
+     * `onComplete` receives true if anything was collected, including a partial
+     * response from someone who answered two questions and dismissed. Discarding
+     * partials would bias results toward people with time to finish.
+     */
+    fun showSurvey(
+        activity: Activity,
+        study: Study,
+        route: String? = null,
+        onComplete: (Boolean) -> Unit = {}
+    ) {
+        // A second sheet over a live one would split the response in two.
+        if (surveyOpen) {
+            log("survey ignored: one is already open")
+            return
+        }
+        surveyOpen = true
+
+        SurveyPanel(
+            activity = activity,
+            study = study,
+            onDone = { answers, completed, durationMs ->
+                surveyOpen = false
+                submitResearchResponse(study.id, answers, completed, durationMs, route)
+                log("survey ${study.id} ${if (completed) "completed" else "partial"} (${answers.size} answer(s))")
+                onComplete(true)
+            },
+            onDismiss = {
+                surveyOpen = false
+                log("survey ${study.id} dismissed without answers")
+                onComplete(false)
+            }
+        ).show()
+    }
 
     /** Sends buffered events immediately. Returns how many were delivered. */
     fun flushEvents(onComplete: (Int) -> Unit = {}) {
