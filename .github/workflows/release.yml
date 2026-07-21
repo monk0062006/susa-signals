@@ -12,10 +12,35 @@ on:
     tags:
       - 'v*'
 
+  # Manual trigger, so a channel can be exercised without burning a version.
+  # Tags are permanent and npm versions cannot be reused, which makes "just tag
+  # it and see" an expensive way to discover a credential is wrong.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (not necessarily released)'
+        required: true
+        default: '0.0.1-test'
+      channel:
+        description: 'Which registry to run'
+        required: true
+        default: 'maven'
+        type: choice
+        options: [maven, npm, both]
+      dry_run:
+        description: 'Build and validate, but do not upload'
+        required: true
+        default: true
+        type: boolean
+
 # Two independent registries. Neither should be able to block the other, and a
 # failure in one must not leave the other half-published silently.
 jobs:
   npm:
+    # A tag runs everything; a manual run only what was asked for.
+    if: >-
+      github.event_name == 'push' ||
+      contains(fromJSON('["npm","both"]'), github.event.inputs.channel)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -32,11 +57,18 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Derive version from tag
+      - name: Derive version
         id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          # A manual run supplies its own version; a tag run takes it from the ref.
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           # Reject anything that is not a plain semver. A malformed tag would
           # otherwise publish a garbage version that cannot be unpublished
           # after 72 hours.
@@ -82,16 +114,29 @@ jobs:
       # Order matters: web depends on core at the exact pinned version, so core
       # must exist on the registry first or the web publish resolves nothing.
       - name: Publish @susa/signals-core
+        if: github.event.inputs.dry_run != 'true'
         run: npm publish --workspace @susa/signals-core --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Dry run - validate the tarball without publishing
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          set -euo pipefail
+          npm publish --workspace @susa/signals-core --access public --dry-run
+          npm publish --workspace @susa/signals --access public --dry-run
+          echo "::notice::Dry run - nothing was published."
+
       - name: Publish @susa/signals
+        if: github.event.inputs.dry_run != 'true'
         run: npm publish --workspace @susa/signals --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   maven:
+    if: >-
+      github.event_name == 'push' ||
+      contains(fromJSON('["maven","both"]'), github.event.inputs.channel)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -122,12 +167,19 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Derive version from tag
+      - name: Derive version
         if: steps.creds.outputs.configured == 'true'
         id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          # A manual run supplies its own version; a tag run takes it from the ref.
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::tag '$GITHUB_REF_NAME' is not semver"
             exit 1
