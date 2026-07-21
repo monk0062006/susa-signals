@@ -20,7 +20,10 @@ final class MultipartUploader {
     }
 
     /// Returns the server-assigned attachment id.
-    func upload(pngData: Data, filename: String) throws -> String {
+    ///
+    /// `mimeType` is explicit because replay frames are JPEG while screenshots
+    /// are PNG, and the server validates the declared type against an allowlist.
+    func upload(pngData: Data, filename: String, mimeType: String = "image/png") throws -> String {
         guard let url = URL(string: endpoint + "/v1/uploads") else {
             throw IngestError(message: "Invalid endpoint", status: nil, retryable: false)
         }

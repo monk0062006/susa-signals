@@ -47,6 +47,12 @@ public final class FeedbackSDK {
     /// events and reports must not share a queue.
     private let analytics: Analytics
 
+    #if canImport(UIKit)
+    /// Frame-based session replay. Constructed eagerly but inert until start()
+    /// is called AND consent exists.
+    private let replay: FrameRecorder
+    #endif
+
     private var reporter: Reporter?
     private var customData: [String: String]?
     /// Guards against a second composer opening over a live one.
@@ -93,6 +99,16 @@ public final class FeedbackSDK {
             consent: consentManager,
             device: { DeviceInfo.collect(sdkVersion: sdkVersion, route: nil) }
         )
+        #if canImport(UIKit)
+        self.replay = FrameRecorder(
+            consent: consentManager,
+            uploader: HTTPFrameUploader(
+                endpoint: config.endpoint,
+                projectId: config.projectId,
+                client: client
+            )
+        )
+        #endif
     }
 
     private func onInit() {
@@ -124,8 +140,11 @@ public final class FeedbackSDK {
 
     public func revokeConsent() {
         consent.revoke()
-        // Withdrawal is immediate: buffered events are discarded, not sent.
+        // Withdrawal is immediate: buffered data is discarded, not sent.
         analytics.discard()
+        #if canImport(UIKit)
+        replay.abandon()
+        #endif
         log("consent revoked")
     }
 
@@ -144,6 +163,20 @@ public final class FeedbackSDK {
     public func identify(_ user: Reporter) { analytics.identify(user) }
 
     public func identify(userId: String) { analytics.identify(userId: userId) }
+
+    #if canImport(UIKit)
+    /// Starts session replay if consent allows. Returns the session id, or nil.
+    ///
+    /// Callers should stop it when the app backgrounds — a recorder capturing a
+    /// backgrounded app burns battery for frames of nothing.
+    @discardableResult
+    public func startRecording() -> String? { replay.start() }
+
+    public func stopRecording() { replay.stop() }
+
+    /// The id linking a report filed during this session to its recording.
+    public func currentSessionId() -> String? { replay.currentSessionId() }
+    #endif
 
     /// Sends buffered events immediately. Returns how many were delivered.
     public func flushEvents(completion: @escaping (Int) -> Void = { _ in }) {
@@ -285,6 +318,7 @@ public final class FeedbackSDK {
                 reporter: self.reporter,
                 attachments: attachments,
                 customData: self.customData,
+                sessionId: self.replay.currentSessionId(),
                 consent: self.consent.load()
             )
 

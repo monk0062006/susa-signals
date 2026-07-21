@@ -195,4 +195,5 @@ jobs:
           grep -q -- "-apple-ios" /tmp/xcodebuild.log             || { echo "::error::wrong platform - no iOS target triple in the build log"; exit 1; }
           grep -q "Test Suite 'AnnotationRendererTests' passed" /tmp/xcodebuild.log             || { echo "::error::the UIKit suite did not run - it was compiled out"; exit 1; }
           grep -q "Test Suite 'AnalyticsTests' passed" /tmp/xcodebuild.log             || { echo "::error::the analytics suite did not run"; exit 1; }
+          grep -q "Test Suite 'ReplayMaskingTests' passed" /tmp/xcodebuild.log             || { echo "::error::the replay masking suite did not run - redaction is unverified"; exit 1; }
           echo "confirmed: iOS target triple present, UIKit suite ran"
