@@ -82,14 +82,23 @@ final class AnalyticsTests: XCTestCase {
         consent.grant([.analytics], source: "explicit_prompt")
 
         let a = analytics(Analytics.Options(batchSize: 3))
-        for i in 0..<3 { a.track("event-\(i)") }
 
-        // The auto-flush is dispatched asynchronously.
-        let drained = expectation(description: "batch flushed")
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) { drained.fulfill() }
-        wait(for: [drained], timeout: 2)
+        // withExtendedLifetime is load-bearing, not decoration. The auto-flush
+        // is dispatched with [weak self], and `a`'s last use is the final
+        // track() call — so ARC may release it before the async block runs,
+        // leaving self nil and no flush at all. The SDK holds Analytics as a
+        // stored property for the app's lifetime, so this is a test-lifetime
+        // hazard rather than a product one.
+        withExtendedLifetime(a) {
+            for i in 0..<3 { a.track("event-\(i)") }
 
-        XCTAssertEqual(transport.totalSent, 3)
+            let drained = expectation(description: "batch flushed")
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { drained.fulfill() }
+            wait(for: [drained], timeout: 3)
+
+            XCTAssertEqual(transport.totalSent, 3)
+            XCTAssertEqual(a.buffered(), 0)
+        }
     }
 
     func testOverflowDropsOldestNotNewest() {
