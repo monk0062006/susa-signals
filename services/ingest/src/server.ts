@@ -28,6 +28,10 @@ const app = createIngestApp({
   serveDashboard: true,
   // Local development only. In production pass an explicit origin allowlist.
   allowedOrigins: true,
+  // RATE_LIMITS=off measures the storage ceiling without the throttle in front
+  // of it. Never set in production — it exists so capacity can be characterised
+  // separately from the limiter that protects it.
+  ...(process.env.RATE_LIMITS === 'off' ? { rateLimits: false as const } : {}),
 });
 
 const server = app.listen(PORT, () => {

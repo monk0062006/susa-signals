@@ -8,6 +8,8 @@ import { Events, parseEventBatch } from './db/events.js';
 import { Repository } from './db/repository.js';
 import { Retention } from './db/retention.js';
 import { Studies } from './db/studies.js';
+import { createLogger, requestLogging, Metrics, type Logger } from './observability.js';
+import { DEFAULT_LIMITS, RateLimiter, rateLimit, type RateLimitConfig } from './ratelimit.js';
 import { ValidationError, parseReplayChunk, parseSubmission } from './validate.js';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -28,6 +30,14 @@ export interface AppOptions {
    * open policy lets any site write into any project it can name.
    */
   allowedOrigins?: string[] | true;
+  /** Injected so the host product can route these lines into its own stack. */
+  logger?: Logger;
+  /**
+   * Per-project throttles. Traffic classes are budgeted separately so an
+   * analytics flood cannot starve bug reports. Pass `false` only if the host
+   * product already rate limits upstream.
+   */
+  rateLimits?: RateLimitConfig | false;
 }
 
 /**
@@ -43,12 +53,24 @@ export function createIngestApp(options: AppOptions): express.Express {
   const studies = new Studies(options.pool);
   const events = new Events(options.pool);
 
+  const logger = options.logger ?? createLogger();
+  const metrics = new Metrics();
+  const limiter =
+    options.rateLimits === false
+      ? null
+      : new RateLimiter(options.rateLimits ?? DEFAULT_LIMITS, () => Date.now(), metrics);
+
+  /** No-op when limiting is disabled, so route definitions stay uniform. */
+  const limit = (traffic: Parameters<typeof rateLimit>[1], cost?: (req: express.Request) => number) =>
+    limiter ? rateLimit(limiter, traffic, cost) : ((_req, _res, next) => next()) as express.RequestHandler;
+
   const app = express();
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
   });
 
+  app.use(requestLogging(logger));
   app.use(express.json({ limit: '1mb' }));
   app.use(cors(options.allowedOrigins ?? true));
 
@@ -70,9 +92,13 @@ export function createIngestApp(options: AppOptions): express.Express {
     }
   });
 
+  app.get('/metrics', (_req, res) => {
+    res.json({ counters: metrics.snapshot(), rateLimitBuckets: limiter?.size() ?? 0 });
+  });
+
   // --- uploads --------------------------------------------------------------
 
-  app.post('/v1/uploads', upload.single('file'), async (req, res) => {
+  app.post('/v1/uploads', limit('uploads'), upload.single('file'), async (req, res) => {
     try {
       const project = projectId(req);
       if (!req.file) {
@@ -98,7 +124,7 @@ export function createIngestApp(options: AppOptions): express.Express {
 
       res.status(201).json({ id });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -124,13 +150,13 @@ export function createIngestApp(options: AppOptions): express.Express {
       res.setHeader('cache-control', 'private, max-age=3600');
       res.send(blob.bytes);
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
   // --- submissions ----------------------------------------------------------
 
-  app.post('/v1/reports', async (req, res) => {
+  app.post('/v1/reports', limit('reports'), async (req, res) => {
     try {
       const project = projectId(req);
       const submission = parseSubmission(req.body, project);
@@ -145,7 +171,7 @@ export function createIngestApp(options: AppOptions): express.Express {
 
       res.status(201).json({ id: submission.id, duplicate: false });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -158,7 +184,7 @@ export function createIngestApp(options: AppOptions): express.Express {
       // `reports` for backwards compatibility with the shipped dashboard bundle.
       res.json({ reports: page.items, nextCursor: page.nextCursor });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -171,13 +197,13 @@ export function createIngestApp(options: AppOptions): express.Express {
       }
       res.json(submission);
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
   // --- replay ---------------------------------------------------------------
 
-  app.post('/v1/replay/chunks', async (req, res) => {
+  app.post('/v1/replay/chunks', limit('replay'), async (req, res) => {
     try {
       const project = projectId(req);
       const chunk = parseReplayChunk(req.body, project);
@@ -193,7 +219,7 @@ export function createIngestApp(options: AppOptions): express.Express {
 
       res.status(202).json({ seq: chunk.seq, accepted: true, duplicate: !inserted });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -206,7 +232,7 @@ export function createIngestApp(options: AppOptions): express.Express {
       }
       res.json(session);
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -215,7 +241,7 @@ export function createIngestApp(options: AppOptions): express.Express {
       const deleted = await retention.deleteReplaySession(projectId(req), req.params.sessionId);
       res.status(deleted ? 204 : 404).end();
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -225,17 +251,27 @@ export function createIngestApp(options: AppOptions): express.Express {
    * Batch ingest. Returns 202 rather than 201: the SDK does not wait on this
    * and has nothing useful to do with a per-event result.
    */
-  app.post('/v1/events', async (req, res) => {
+  app.post(
+    '/v1/events',
+    // Cost is the batch size: a 500-event batch consumes 500 tokens, so the
+    // limit tracks work rather than request count.
+    limit('events', (req) => {
+      const body = req.body as { events?: unknown[] };
+      return Array.isArray(body?.events) ? Math.max(body.events.length, 1) : 1;
+    }),
+    async (req, res) => {
     try {
       const project = projectId(req);
       const { events: batch, device } = parseEventBatch(req.body);
 
       const { inserted } = await events.insertBatch(project, batch, device);
+      metrics.increment('events.inserted', inserted);
       res.status(202).json({ received: batch.length, inserted });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
-  });
+  },
+  );
 
   app.get('/v1/events', async (req, res) => {
     try {
@@ -246,7 +282,7 @@ export function createIngestApp(options: AppOptions): express.Express {
         ),
       });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -259,7 +295,7 @@ export function createIngestApp(options: AppOptions): express.Express {
         ),
       });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -272,7 +308,7 @@ export function createIngestApp(options: AppOptions): express.Express {
         }),
       });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -282,7 +318,7 @@ export function createIngestApp(options: AppOptions): express.Express {
     try {
       res.json({ studies: await studies.list(projectId(req)) });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -305,7 +341,7 @@ export function createIngestApp(options: AppOptions): express.Express {
       }
       res.json(study);
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -326,7 +362,7 @@ export function createIngestApp(options: AppOptions): express.Express {
 
       res.status(200).json(study);
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -335,7 +371,7 @@ export function createIngestApp(options: AppOptions): express.Express {
       const deleted = await studies.delete(projectId(req), req.params.id);
       res.status(deleted ? 204 : 404).end();
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -350,7 +386,7 @@ export function createIngestApp(options: AppOptions): express.Express {
       }
       res.json({ study, results: await studies.results(project, req.params.id) });
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -369,7 +405,7 @@ export function createIngestApp(options: AppOptions): express.Express {
 
       res.status(200).json(await retention.getPolicy(project));
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -377,7 +413,7 @@ export function createIngestApp(options: AppOptions): express.Express {
     try {
       res.json(await retention.getPolicy(projectId(req)));
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -402,7 +438,7 @@ export function createIngestApp(options: AppOptions): express.Express {
 
       res.json(await retention.eraseSubject(project, subject));
     } catch (err) {
-      handleError(err, res);
+      handleError(err, res, req);
     }
   });
 
@@ -455,12 +491,16 @@ function optionalPositiveInt(value: unknown, field: string): number | null {
   return value;
 }
 
-function handleError(err: unknown, res: express.Response): void {
+function handleError(err: unknown, res: express.Response, req?: express.Request): void {
   if (err instanceof ValidationError) {
     // 4xx tells the SDK queue this is permanent and to stop retrying.
     res.status(400).json({ error: err.message });
     return;
   }
-  console.error('[ingest] unhandled', err);
+
+  // Logged with the request id so a 500 can be traced to its exact request.
+  req?.log?.error('unhandled error', {
+    error: err instanceof Error ? err.message : String(err),
+  });
   res.status(500).json({ error: 'Internal error' });
 }

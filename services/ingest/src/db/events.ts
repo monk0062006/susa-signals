@@ -32,6 +32,16 @@ export interface TimeseriesPoint {
 }
 
 const MAX_BATCH = 500;
+/**
+ * How far a client timestamp may sit from now before it is clamped.
+ *
+ * occurred_at is the partition key, so an unbounded value from a device with a
+ * broken clock would create partitions years out or fall into the default one.
+ * Clamping keeps partitioning predictable while still honouring genuine offline
+ * backfill within the window.
+ */
+const MAX_CLOCK_SKEW_PAST_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_CLOCK_SKEW_FUTURE_MS = 24 * 60 * 60 * 1000;
 const MAX_NAME = 200;
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -55,6 +65,7 @@ export class Events {
     if (events.length > MAX_BATCH) throw new ValidationError('batch too large');
 
     await this.pool.query(
+      // projects is keyed on id alone; only events carries the composite key.
       `INSERT INTO feedback.projects (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
       [projectId],
     );
@@ -92,7 +103,7 @@ export class Events {
       SELECT v.id, v.project_id, v.name, v.properties, v.user_id, v.session_id, v.occurred_at, $${values.length + 1}::jsonb
         FROM (VALUES ${tuples.join(',')})
           AS v(id, project_id, name, properties, user_id, session_id, occurred_at)
-      ON CONFLICT (id) DO NOTHING
+      ON CONFLICT (id, occurred_at) DO NOTHING
       `,
       [...values, deviceJson],
     );
@@ -109,7 +120,7 @@ export class Events {
              extract(epoch FROM received_at) * 1000 AS received_ms
         FROM feedback.events
        WHERE project_id = $1
-       ORDER BY received_at DESC
+       ORDER BY occurred_at DESC
        LIMIT $2
       `,
       [projectId, Math.min(Math.max(limit, 1), 500)],
@@ -141,7 +152,7 @@ export class Events {
              count(DISTINCT user_id)::int     AS users
         FROM feedback.events
        WHERE project_id = $1
-         AND received_at > now() - make_interval(days => $2)
+         AND occurred_at > now() - make_interval(days => $2)
        GROUP BY name
        ORDER BY total DESC
        LIMIT 100
@@ -163,10 +174,10 @@ export class Events {
 
     const { rows } = await this.pool.query(
       `
-      SELECT date_trunc($3, received_at) AS bucket, count(*)::int AS total
+      SELECT date_trunc($3, occurred_at) AS bucket, count(*)::int AS total
         FROM feedback.events
        WHERE project_id = $1
-         AND received_at > now() - make_interval(days => $2)
+         AND occurred_at > now() - make_interval(days => $2)
          AND ($4::text IS NULL OR name = $4)
        GROUP BY 1
        ORDER BY 1 ASC
@@ -188,6 +199,19 @@ export class Events {
     );
     return rowCount ?? 0;
   }
+}
+
+/**
+ * Bounds a client-supplied timestamp so a broken device clock cannot scatter
+ * partitions years into the future or past.
+ *
+ * occurred_at is the partition key, so this is not cosmetic — an unclamped
+ * value creates partitions nobody asked for or dumps rows into the default one.
+ */
+function clampTimestamp(value: number): number {
+  const now = Date.now();
+  if (!Number.isFinite(value)) return now;
+  return Math.min(Math.max(value, now - MAX_CLOCK_SKEW_PAST_MS), now + MAX_CLOCK_SKEW_FUTURE_MS);
 }
 
 /** Validates one incoming batch. Nothing from a public endpoint is trusted. */
@@ -217,7 +241,7 @@ export function parseEventBatch(body: unknown): {
       id: e.id,
       name: e.name.slice(0, MAX_NAME),
       sessionId: e.sessionId,
-      timestamp: typeof e.timestamp === 'number' ? e.timestamp : Date.now(),
+      timestamp: clampTimestamp(typeof e.timestamp === 'number' ? e.timestamp : Date.now()),
     };
 
     if (typeof e.properties === 'object' && e.properties !== null) {
