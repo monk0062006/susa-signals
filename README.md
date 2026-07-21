@@ -1,9 +1,16 @@
-# Cross-platform feedback & UX research SDK
+# Susa Signals
 
-Bug reporting, research responses, and session replay for web, iOS and Android,
-delivered into one ingest pipeline.
+Bug reporting, UX research, session replay, and product analytics for web, iOS
+and Android, delivered into one ingest pipeline on a single wire format.
 
-The premise: Marker.io is web-only and has no mobile SDK. Native mobile is the gap.
+The premise: the established tools in this space are web-only. Native mobile is
+the gap.
+
+```bash
+npm install @susatest/signals                    # web
+implementation("com.susatest:signals:0.1.0")     # android
+.package(url: "https://github.com/monk0062006/susa-signals", from: "0.1.0")
+```
 
 ## Layout
 
@@ -13,8 +20,8 @@ packages/web        Browser SDK. Screenshot, annotation, replay (rrweb).
 apps/dashboard      Operator UI. Submission list, detail, replay playback.
 services/ingest     Ingest API + serves the dashboard.
 examples/demo       Runnable demo + privacy test fixture.
-platforms/android   Kotlin library. Builds; 31 unit tests pass.
-platforms/ios       Swift package. NEVER COMPILED — see below.
+platforms/android   Kotlin library. 53 JVM tests, 26 on-device tests.
+platforms/ios       Swift package. 64 tests on the iOS simulator in CI.
 ```
 
 ![Dashboard](docs/dashboard.png)
@@ -34,33 +41,35 @@ fixtures.
 
 ## Verification status — read this before trusting anything
 
-| Component | Builds | Tests | Verified how |
-|---|---|---|---|
-| Web SDK | Yes | 7/7 privacy checks | Real Chrome via puppeteer |
-| Dashboard | Yes | 21/21 render checks | Real Chrome, real seeded data |
-| Android | Yes (112KB AAR) | 31/31 | JVM unit tests, Gradle wrapper |
-| **iOS** | **Not locally** | **Not locally** | **CI only — see below** |
+| Component | Tests | Verified how |
+|---|---|---|
+| Ingest + storage | 89 | Real Postgres, not mocks |
+| Web SDK | 9 privacy checks | Real Chrome via puppeteer |
+| Dashboard | 27 render checks | Real Chrome, real seeded data |
+| Surveys | 15 | Real Chrome |
+| Android | 53 JVM + 26 on-device | Physical device (Galaxy M12) |
+| iOS | 64 | iOS simulator on macOS CI |
 
-The iOS package was written on a Windows machine with no Swift compiler, so it has
-never been compiled here. Apple ships the Swift toolchain for macOS only; this is
-not a sequencing choice, there is no compiler to run.
+Redaction is verified by reading pixels back on a physical Android device. The
+JVM stubs `android.graphics`, so a Canvas draws nothing there and colour
+assertions pass trivially — the test would confirm redaction on a device that
+never redacted anything.
 
-`.github/workflows/ci.yml` closes that gap with a `macos-14` job running
-`swift build` and `swift test`. **The first run will almost certainly surface
-compile errors** — that is expected for code no compiler has seen, and it is the
-point of adding the job. Push the branch or trigger the workflow manually
-(`workflow_dispatch`) to get the first real signal.
-
-The Swift test suites mirror Kotlin's case for case, so failures should be legible
-against a passing Android reference.
+The Swift test suites mirror Kotlin's case for case, so a behavioural divergence
+shows up as a test that exists on one platform and not the other.
 
 ## CI
 
 | Job | Runner | What it proves |
 |---|---|---|
 | `web` | ubuntu | Typecheck, and masking redacts before bytes leave the browser |
-| `android` | ubuntu | Library builds, 31 unit tests, release AAR |
-| `ios` | **macos-14** | Swift compiles and its unit tests pass |
+| `android` | ubuntu | Library builds, 53 unit tests, release AAR |
+| `ios` | **macos-14** | Compiles for the iOS simulator and 64 tests pass |
+
+The iOS job asserts that an `-apple-ios` triple was actually used and that the
+named suites ran. Without those guards it silently built for macOS, where
+`canImport(UIKit)` is false and every UIKit path compiles out — a green run
+proving nothing.
 
 The privacy job is not optional. A failure there is a PII leak, not a flaky test.
 
@@ -127,6 +136,16 @@ buffered events rather than flushing them.
 
 **Consent is versioned.** Bump `CONSENT_POLICY_VERSION` when the consent copy changes
 materially; grants against superseded terms stop counting.
+
+**Encrypted at rest.** Screenshots and replay frames are stored AES-256-GCM with
+per-row key ids, so keys rotate without rewriting data. Redaction protects
+against what the user knew was sensitive; encryption covers the stolen backup
+and the misconfigured replica. `/health` reports `encryptionAtRest` so it is
+assertable in production rather than assumed.
+
+**Reads are audited.** Writes are reconstructable from the data itself; reads
+leave no trace. A replay is a recording of a person, and "which of your staff
+watched this" is a question customers are entitled to have answered.
 
 ### Verified, not assumed
 
@@ -201,27 +220,29 @@ lawfully operate in. So this ships with the storage layer, not after it:
 
 ## Still open
 
-1. **Lazy-load html2canvas.** It is ~93% of the web bundle (53KB gzipped vs 6KB for
-   our own code) and is only needed once someone clicks Feedback.
-2. **Replay events are unencrypted at rest** and may contain whatever escaped masking.
-3. **Native session replay** — see the platform table below.
-4. **Nothing is published** to npm, Maven Central, or SPM yet.
+1. **The dashboard cannot display analytics events or play native frame replay.**
+   Both are captured and stored; neither has a consumer. Two producers without
+   readers.
+2. **Three hand-maintained schema copies** (TS/Kotlin/Swift) remain a standing
+   drift risk — see below.
+3. **No hosted deployment.** The ingest service runs locally only; it has not
+   been deployed anywhere.
 
 ## Platform status
 
-| Platform | Bug reports | Research responses | Annotation UI | Session replay |
-|---|---|---|---|---|
-| Web | Built | Schema + API, no UI | Built | Built (rrweb) |
-| Android | Built, tested | Built, tested | Built, tested | Not started |
-| iOS | Written, unverified | Written, unverified | Written, unverified | Not started |
+| Platform | Bug reports | Surveys | Annotation UI | Session replay | Analytics |
+|---|---|---|---|---|---|
+| Web | Built | Built | Built | Built (rrweb) | Built |
+| Android | Built | Built | Built | Built (frames) | Built |
+| iOS | Built | Built | Built | Built (frames) | Built |
 
 All three platforms now offer box / arrow / pen / **redact**, with annotations in
 normalized 0..1 coordinates and redactions burned into the pixels before upload.
 
-Native replay cannot reuse rrweb — there is no DOM. It requires frame-based capture
-(the UXCam/Smartlook approach), a separate implementation with its own performance
-and privacy characteristics, and larger than everything built so far. It is the last
-significant gap.
+Native replay cannot reuse rrweb — there is no DOM. It uses frame-based capture
+(PixelCopy on Android, UIGraphicsImageRenderer on iOS), a separate implementation
+with its own performance and privacy characteristics. Masking is applied to the
+frame before encoding, so a redacted region never exists as pixels in the upload.
 
 ### Why the geometry is unit tested
 
