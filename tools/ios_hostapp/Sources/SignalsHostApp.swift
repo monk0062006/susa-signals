@@ -1,5 +1,6 @@
 import SwiftUI
-import SusaSignals
+// The SDK source is compiled into this same target (see project.yml), so there
+// is no separate SusaSignals module to import.
 
 // Minimal host app: on appear, drive the real Signals SDK against the endpoint
 // from Info.plist and post the same payloads the Android/simulator captures use.

@@ -39,7 +39,10 @@ jobs:
 
       - name: Run the SDK capture test on the iOS Simulator
         env:
-          SIGNALS_CAPTURE_URL: http://localhost:8000/signals
+          # TEST_RUNNER_ prefix: xcodebuild forwards these into the simulator
+          # test process (with the prefix stripped), so the test reads
+          # SIGNALS_CAPTURE_URL. A plain step env does NOT cross into the sim.
+          TEST_RUNNER_SIGNALS_CAPTURE_URL: http://localhost:8000/signals
         run: |
           set -o pipefail
           # The simulator shares the host network, so localhost:8000 in the test

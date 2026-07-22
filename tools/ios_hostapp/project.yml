@@ -8,16 +8,18 @@ options:
   bundleIdPrefix: com.facebook.WebDriverAgentRunner.xctrunner
   deploymentTarget:
     iOS: "13.0"
-packages:
-  SusaSignals:
-    # the SDK package lives at the repo root (Package.swift there)
-    path: ../..
 targets:
   SignalsHostApp:
     type: application
     platform: iOS
     sources:
       - Sources
+      # Embed the SDK source directly into the app target rather than as a
+      # SwiftPM dependency. A local package reference makes xcodebuild resolve
+      # packages when reading the project, which failed on the CI runner
+      # ("Unable to read project"). Compiling the source in-target removes that
+      # variable entirely — the app and SDK become one module.
+      - ../../platforms/ios/Sources/SusaSignals
     info:
       path: Info.plist
       properties:
@@ -34,6 +36,3 @@ targets:
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: NO
         TARGETED_DEVICE_FAMILY: "1,2"
-    dependencies:
-      - package: SusaSignals
-        product: SusaSignals
