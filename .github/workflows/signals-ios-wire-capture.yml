@@ -1,0 +1,113 @@
+# SPEC-173 §3 #1 (iOS) — capture the REAL Swift SDK's wire bytes from the iOS
+# Simulator, and build an unsigned device .ipa for the physical-device track.
+#
+# The macOS runner is the "Mac" the port verification otherwise lacks: it has
+# Xcode + the iOS Simulator (full iOS runtime incl. UIKit), so the SDK runs for
+# real and posts to a capture server in the same job. The captured bytes upload
+# as an artifact, validated against the actual Python port in the SUSA repo.
+name: signals-ios-wire-capture
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: ["signals-ios-capture"]
+
+jobs:
+  simulator-capture:
+    name: iOS Simulator — capture SDK wire bytes
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve a simulator UDID
+        id: sim
+        run: |
+          set -o pipefail
+          UDID=$(xcrun simctl list devices available --json \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v))")
+          test -n "$UDID"
+          echo "udid=${UDID}" >> "$GITHUB_OUTPUT"
+          xcrun simctl list devices available | grep -F "$UDID"
+
+      - name: Start capture server (localhost:8000)
+        run: |
+          nohup python3 tools/signals_capture_server.py "$PWD/ios_capture.jsonl" 8000 > capture_server.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:8000/health && break || sleep 1
+          done
+          curl -sf http://localhost:8000/health
+
+      - name: Run the SDK capture test on the iOS Simulator
+        env:
+          SIGNALS_CAPTURE_URL: http://localhost:8000/signals
+        run: |
+          set -o pipefail
+          # The simulator shares the host network, so localhost:8000 in the test
+          # reaches the capture server started above. Filter to the capture test
+          # so the rest of the (network-free) unit suite doesn't run here.
+          xcodebuild test \
+            -scheme SusaSignals \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -only-testing:SusaSignalsTests/SpecPortWireCaptureTests \
+            | tee /tmp/xcodebuild.log
+
+      - name: Show what was captured
+        if: always()
+        run: |
+          echo "=== capture server log ==="; cat capture_server.log || true
+          echo "=== captured bytes ==="; cat ios_capture.jsonl || echo "(nothing captured)"
+          # Fail loudly if the simulator ran but nothing arrived.
+          test -s ios_capture.jsonl || { echo "::error::no bytes captured — the SDK did not post"; exit 1; }
+
+      - name: Assert it targeted iOS (not a silent macOS retarget)
+        run: |
+          grep -q -- "-apple-ios" /tmp/xcodebuild.log \
+            || { echo "::error::no iOS target triple — build retargeted the host"; exit 1; }
+
+      - name: Upload captured iOS wire bytes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-wire-capture
+          path: ios_capture.jsonl
+
+  device-ipa:
+    name: Build unsigned device .ipa (physical-device track)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      # A minimal host app that embeds the SDK and drives it on launch, built
+      # for a real device (arm64-apple-ios) and left UNSIGNED. It is signed
+      # afterwards off-runner with the developer's own cert + provisioning
+      # profile (bundle id must match the profile). See the SUSA capture_rig
+      # README for the sign+install steps.
+      - name: Generate the host app project
+        run: |
+          brew install xcodegen
+          bash tools/ios_hostapp/make_project.sh
+
+      - name: Build unsigned .ipa for device
+        run: |
+          set -o pipefail
+          cd tools/ios_hostapp
+          xcodebuild \
+            -project SignalsHostApp.xcodeproj \
+            -scheme SignalsHostApp \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/SignalsHostApp.xcarchive \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            archive | tee /tmp/device_build.log
+          # package the .app into an unsigned Payload/ .ipa
+          APP=$(find build/SignalsHostApp.xcarchive/Products/Applications -maxdepth 1 -name "*.app" | head -1)
+          rm -rf Payload && mkdir Payload && cp -R "$APP" Payload/
+          python3 -c "import os,zipfile; z=zipfile.ZipFile('SignalsHostApp-unsigned.ipa','w',zipfile.ZIP_DEFLATED); [z.write(os.path.join(dp,f), os.path.relpath(os.path.join(dp,f),'.').replace(os.sep,'/')) for dp,_,fs in os.walk('Payload') for f in fs]; z.close()"
+          ls -la SignalsHostApp-unsigned.ipa
+
+      - name: Upload unsigned device .ipa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-device-unsigned-ipa
+          path: tools/ios_hostapp/SignalsHostApp-unsigned.ipa

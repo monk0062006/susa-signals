@@ -1,0 +1,39 @@
+# xcodegen spec for a minimal iOS host app that embeds the Signals SDK and
+# drives it on launch. Used only to produce an installable device .ipa for the
+# SPEC-173 physical-device wire test. The bundle id matches the developer's
+# existing free-account provisioning profile so it can be signed off-runner
+# without a fresh Sideloadly run.
+name: SignalsHostApp
+options:
+  bundleIdPrefix: com.facebook.WebDriverAgentRunner.xctrunner
+  deploymentTarget:
+    iOS: "13.0"
+packages:
+  SusaSignals:
+    # the SDK package lives at the repo root (Package.swift there)
+    path: ../..
+targets:
+  SignalsHostApp:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Signals Host
+        UILaunchScreen: {}
+        # Endpoint the app posts to. Patched to the capture host's LAN IP at
+        # sign time (a real device cannot reach the runner's localhost).
+        SIGNALS_ENDPOINT: "http://127.0.0.1:8000/signals"
+        SIGNALS_PROJECT_ID: "proj_ios_device_cap"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.facebook.WebDriverAgentRunner.xctrunner.2B8RPB7T5V
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - package: SusaSignals
+        product: SusaSignals

@@ -18,3 +18,10 @@ platforms/ios/.swiftpm/
 
 .env
 .DS_Store
+
+# SPEC-173 iOS host-app build outputs
+tools/ios_hostapp/build/
+tools/ios_hostapp/SignalsHostApp.xcodeproj/
+tools/ios_hostapp/Payload/
+tools/ios_hostapp/*.ipa
+platforms/android/.kotlin/
