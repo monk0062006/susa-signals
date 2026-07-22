@@ -152,6 +152,25 @@ wherever the rest of your production secrets live.
 
 All three are published. `endpoint` points at wherever the router is mounted.
 
+### Create a project first (dashboard)
+
+Every SDK needs one credential: a **`project` id**, and a project is bound to **one
+app**. Create it in the SUSA dashboard before wiring any SDK:
+
+1. **Signals → New project.**
+2. **Pick the app.** The picker lists the apps the org runs a strategist for, each
+   labelled by platform — `Android — com.acme.app`, `iOS — com.acme.app`,
+   `Web — acme.com`. An Android package id and an iOS bundle id can be the *same*
+   string, so the platform label is what keeps them distinct; the same label shows
+   next to the project throughout the dashboard. If the app isn't listed, create a
+   strategist for it first.
+3. **Name it** (web projects add their allowed origins here).
+4. Copy the `project` id (e.g. `proj_acme_web`).
+
+The binding means real-user reports route to exactly the right strategist — App B's
+reports never reach App A's brain — and one app+platform = one project. Signals is a
+**Pro / Team** feature; a free-plan org sees an upgrade prompt on New project.
+
 ### Web
 
 ```bash
