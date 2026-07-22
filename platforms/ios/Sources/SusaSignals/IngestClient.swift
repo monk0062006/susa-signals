@@ -32,7 +32,10 @@ public final class IngestClient: SubmissionTransport {
         projectId: String,
         timeout: TimeInterval = 15,
         signingSecret: Data? = nil,
-        now: @escaping () -> Int = { Int(Date().timeIntervalSince1970) }
+        now: @escaping () -> Int = { Int(Date().timeIntervalSince1970) },
+        // Injectable so a test can supply a URLSession with a stub URLProtocol and
+        // capture the actual request the client sends.
+        session: URLSession? = nil
     ) {
         // Trailing slashes would produce "//v1/reports", which some proxies reject.
         var trimmed = endpoint
@@ -43,12 +46,16 @@ public final class IngestClient: SubmissionTransport {
         self.signingSecret = signingSecret
         self.now = now
 
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = timeout
-        // The SDK must not consume the user's cellular data on a background flush
-        // any more than necessary; leave the system's discretion in place.
-        config.waitsForConnectivity = false
-        self.session = URLSession(configuration: config)
+        if let session {
+            self.session = session
+        } else {
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = timeout
+            // The SDK must not consume the user's cellular data on a background flush
+            // any more than necessary; leave the system's discretion in place.
+            config.waitsForConnectivity = false
+            self.session = URLSession(configuration: config)
+        }
     }
 
     public func submit(submissionJSON: Data, idempotencyKey: String) throws {
