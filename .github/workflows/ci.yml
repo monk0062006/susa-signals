@@ -39,6 +39,9 @@ jobs:
       - name: Bundle SDK
         run: npm run bundle
 
+      - name: Signing self-test (SPEC-174)
+        run: node scripts/test-signing.mjs
+
       # puppeteer-core never downloads a browser, so CI must supply one.
       - uses: browser-actions/setup-chrome@v1
         id: chrome
