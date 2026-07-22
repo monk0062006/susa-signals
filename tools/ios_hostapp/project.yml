@@ -6,8 +6,11 @@
 name: SignalsHostApp
 options:
   bundleIdPrefix: com.facebook.WebDriverAgentRunner.xctrunner
+  # The SDK's floor is iOS 13, but the host app uses the SwiftUI App/Scene
+  # lifecycle (@main), which is iOS 14+. 15 is a safe, current floor and the
+  # device is iOS 26.5.
   deploymentTarget:
-    iOS: "13.0"
+    iOS: "15.0"
 targets:
   SignalsHostApp:
     type: application
