@@ -32,7 +32,11 @@ interface SubmissionTransport {
 class IngestClient(
     endpoint: String,
     private val projectId: String,
-    private val timeoutMs: Int = 15_000
+    private val timeoutMs: Int = 15_000,
+    // SPEC-174: raw HMAC signing secret. When non-null every request is signed
+    // (x-susa-signature + x-susa-timestamp) so a `required` project accepts it.
+    private val signingSecret: ByteArray? = null,
+    private val nowSeconds: () -> Long = { System.currentTimeMillis() / 1000 }
 ) : SubmissionTransport {
     private val endpoint = endpoint.trimEnd('/')
 
@@ -56,6 +60,7 @@ class IngestClient(
 
     private fun post(path: String, body: String, extraHeaders: Map<String, String>) {
         var connection: HttpURLConnection? = null
+        val bodyBytes = body.toByteArray(Charsets.UTF_8)
         try {
             connection = (URL("$endpoint$path").openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
@@ -65,10 +70,11 @@ class IngestClient(
                 setRequestProperty("content-type", "application/json")
                 setRequestProperty("x-project-id", projectId)
                 extraHeaders.forEach { (k, v) -> setRequestProperty(k, v) }
+                signHeaders(path, bodyBytes).forEach { (k, v) -> setRequestProperty(k, v) }
             }
 
             BufferedOutputStream(connection.outputStream).use { out ->
-                out.write(body.toByteArray(Charsets.UTF_8))
+                out.write(bodyBytes)
                 out.flush()
             }
 
@@ -91,5 +97,11 @@ class IngestClient(
         } finally {
             connection?.disconnect()
         }
+    }
+
+    // SPEC-174 request signing lives in the pure, unit-tested `Signing` object.
+    private fun signHeaders(path: String, body: ByteArray): Map<String, String> {
+        val secret = signingSecret ?: return emptyMap()
+        return Signing.headers(secret, nowSeconds().toString(), path, body)
     }
 }

@@ -21,7 +21,10 @@ data class FeedbackConfig(
     val endpoint: String,
     val reporter: Reporter? = null,
     val customData: Map<String, String> = emptyMap(),
-    val silent: Boolean = false
+    val silent: Boolean = false,
+    // SPEC-174: base64url signing secret from the dashboard. When set, requests
+    // are HMAC-signed so a project in `required` mode accepts them.
+    val signingSecret: String? = null
 )
 
 /**
@@ -92,7 +95,15 @@ class FeedbackSdk private constructor(
             return synchronized(this) {
                 instance ?: run {
                     val storage = SharedPrefsStore(context)
-                    val client = IngestClient(config.endpoint, config.projectId)
+                    val signingSecret = config.signingSecret?.let {
+                        android.util.Base64.decode(
+                            it, android.util.Base64.URL_SAFE or android.util.Base64.NO_PADDING
+                                or android.util.Base64.NO_WRAP,
+                        )
+                    }
+                    val client = IngestClient(
+                        config.endpoint, config.projectId, signingSecret = signingSecret,
+                    )
                     val sdk = FeedbackSdk(
                         context.applicationContext,
                         config,

@@ -25,6 +25,13 @@ export interface WidgetOptions {
   project: string;
   /** Ingest API base URL. */
   endpoint: string;
+  /**
+   * SPEC-174: base64url signing secret from the dashboard. When set, requests are
+   * HMAC-signed so a project in `required` mode accepts them. A secret in a
+   * browser bundle is extractable — prefer minting short-lived tokens on your
+   * backend for anything sensitive.
+   */
+  ingestSecret?: string;
   reporter?: Reporter;
   customData?: Submission['customData'];
   /** Suppress SDK console output. */
@@ -107,7 +114,11 @@ export async function loadWidget(options: WidgetOptions): Promise<Widget> {
   instrumentation.install();
 
   const adapter = new WebPlatformAdapter(instrumentation, options.endpoint, options.project);
-  const client = new IngestClient({ endpoint: options.endpoint, projectId: options.project });
+  const client = new IngestClient({
+    endpoint: options.endpoint,
+    projectId: options.project,
+    ...(options.ingestSecret ? { ingestSecret: options.ingestSecret } : {}),
+  });
   const queue = new ReportQueue(adapter.storage, client);
   const builder = new ReportBuilder(adapter, options.project);
   const consent = new ConsentManager(adapter.storage, CONSENT_POLICY_VERSION);

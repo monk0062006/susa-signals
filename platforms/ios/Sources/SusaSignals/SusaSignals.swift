@@ -13,20 +13,32 @@ public struct SusaSignalsConfig {
     public var reporter: Reporter?
     public var customData: [String: String]?
     public var silent: Bool
+    /// SPEC-174: base64url signing secret from the dashboard. When set, requests
+    /// are HMAC-signed so a project in `required` mode accepts them.
+    public var signingSecret: String?
 
     public init(
         projectId: String,
         endpoint: String,
         reporter: Reporter? = nil,
         customData: [String: String]? = nil,
-        silent: Bool = false
+        silent: Bool = false,
+        signingSecret: String? = nil
     ) {
         self.projectId = projectId
         self.endpoint = endpoint
         self.reporter = reporter
         self.customData = customData
         self.silent = silent
+        self.signingSecret = signingSecret
     }
+}
+
+/// Decodes a base64url string (no padding) to Data. Returns nil on malformed input.
+func decodeBase64URL(_ s: String) -> Data? {
+    var b64 = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+    while b64.count % 4 != 0 { b64.append("=") }
+    return Data(base64Encoded: b64)
 }
 
 /**
@@ -91,7 +103,11 @@ public final class SusaSignals {
         self.customData = config.customData
 
         let storage = UserDefaultsStore()
-        let client = IngestClient(endpoint: config.endpoint, projectId: config.projectId)
+        let client = IngestClient(
+            endpoint: config.endpoint,
+            projectId: config.projectId,
+            signingSecret: config.signingSecret.flatMap(decodeBase64URL)
+        )
         self.client = client
         let consentManager = ConsentManager(storage: storage, policyVersion: consentPolicyVersion)
         self.consent = consentManager

@@ -22,14 +22,26 @@ public final class IngestClient: SubmissionTransport {
     private let projectId: String
     private let timeout: TimeInterval
     private let session: URLSession
+    // SPEC-174: raw HMAC signing secret + clock. When the secret is non-nil every
+    // request is signed so a `required` project accepts it.
+    private let signingSecret: Data?
+    private let now: () -> Int
 
-    public init(endpoint: String, projectId: String, timeout: TimeInterval = 15) {
+    public init(
+        endpoint: String,
+        projectId: String,
+        timeout: TimeInterval = 15,
+        signingSecret: Data? = nil,
+        now: @escaping () -> Int = { Int(Date().timeIntervalSince1970) }
+    ) {
         // Trailing slashes would produce "//v1/reports", which some proxies reject.
         var trimmed = endpoint
         while trimmed.hasSuffix("/") { trimmed.removeLast() }
         self.endpoint = trimmed
         self.projectId = projectId
         self.timeout = timeout
+        self.signingSecret = signingSecret
+        self.now = now
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = timeout
@@ -69,6 +81,9 @@ public final class IngestClient: SubmissionTransport {
         for (key, value) in extraHeaders {
             request.setValue(value, forHTTPHeaderField: key)
         }
+        for (key, value) in signHeaders(path: path, body: body) {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
         request.httpBody = body
 
         // Bridges URLSession's async API to this synchronous one. The caller is
@@ -103,5 +118,11 @@ public final class IngestClient: SubmissionTransport {
                 retryable: retryable
             )
         }
+    }
+
+    // SPEC-174 request signing lives in the pure, unit-tested `Signing` enum.
+    private func signHeaders(path: String, body: Data) -> [String: String] {
+        guard let secret = signingSecret else { return [:] }
+        return Signing.headers(secret: secret, ts: String(now()), path: path, body: body)
     }
 }
