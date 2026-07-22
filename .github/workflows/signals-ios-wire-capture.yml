@@ -76,7 +76,10 @@ jobs:
 
   device-ipa:
     name: Build unsigned device .ipa (physical-device track)
-    runs-on: macos-14
+    # macos-15 defaults to Xcode 16, which reads the project format (77)
+    # xcodegen 2.45.4 emits. macos-14's Xcode 15.4 rejects it as "a future
+    # project file format".
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
