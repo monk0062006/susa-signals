@@ -16,7 +16,12 @@ let package = Package(
         // UIGraphicsImageRenderer needs iOS 10; 13 is the realistic floor for
         // anything shipping today. Raising it is a compatibility decision, not
         // something to change to work around a build error.
-        .iOS(.v13)
+        .iOS(.v13),
+        // macOS is declared ONLY so `swift test` builds on the CI host: SPM
+        // otherwise defaults the host to macOS 10.13, where CryptoKit (used by the
+        // SPEC-174 request signer) does not exist — it needs 10.15+. The shipped
+        // product is iOS; nothing here targets macOS at runtime.
+        .macOS(.v10_15)
     ],
     products: [
         .library(name: "SusaSignals", targets: ["SusaSignals"])
