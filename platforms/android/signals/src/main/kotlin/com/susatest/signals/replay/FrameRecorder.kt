@@ -101,10 +101,21 @@ class FrameRecorder(
     fun stop() {
         if (!running.getAndSet(false)) return
 
-        handler?.removeCallbacksAndMessages(null)
-        flush(final = true)
+        val h = handler
+        val t = thread
+        h?.removeCallbacksAndMessages(null)
 
-        thread?.quitSafely()
+        // Flush the final chunk on the replay thread, NOT the caller's thread.
+        // stopRecording() is normally called from Activity.onPause() on the main
+        // thread, and the chunk upload is network I/O — running it inline throws
+        // NetworkOnMainThreadException, silently dropping the final chunk (and on
+        // most sessions that is the ONLY chunk). Post it, then tear the thread
+        // down once the flush has run.
+        h?.post {
+            flush(final = true)
+            t?.quitSafely()
+        }
+
         thread = null
         handler = null
         activity = null

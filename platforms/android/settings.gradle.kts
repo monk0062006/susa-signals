@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "susa-signals-android"
 include(":signals")
+
+include(":demoapp")
