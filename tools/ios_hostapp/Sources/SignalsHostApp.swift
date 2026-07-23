@@ -34,12 +34,16 @@ struct ContentView: View {
     private func drive() {
         let endpoint = info("SIGNALS_ENDPOINT", "http://127.0.0.1:8000/signals")
         let projectId = info("SIGNALS_PROJECT_ID", "proj_ios_device_cap")
+        // SPEC-174: base64url signing secret. When set, every request is HMAC-signed
+        // so a `required` server accepts it — the on-device signing test.
+        let secret = info("SIGNALS_SIGNING_SECRET", "")
 
         let sdk = SusaSignals.start(config: SusaSignalsConfig(
             projectId: projectId,
             endpoint: endpoint,
             reporter: Reporter(email: "iOSDevice@Example.com", fullName: "iOS Device Rig", externalId: "ext-ios-dev-1"),
-            customData: ["plan": "pro", "tenantId": "acme"]
+            customData: ["plan": "pro", "tenantId": "acme"],
+            signingSecret: secret.isEmpty ? nil : secret
         ))
         sdk.grantConsent([.screenshot, .diagnostics, .analytics])
         sdk.identify(userId: "ext-ios-dev-1")

@@ -28,10 +28,13 @@ targets:
       properties:
         CFBundleDisplayName: Signals Host
         UILaunchScreen: {}
-        # Endpoint the app posts to. Patched to the capture host's LAN IP at
-        # sign time (a real device cannot reach the runner's localhost).
-        SIGNALS_ENDPOINT: "http://127.0.0.1:8000/signals"
+        # Endpoint the app posts to — the dev PC's LAN IP (a real device cannot
+        # reach the runner's localhost). No /signals suffix so paths post as
+        # /v1/... directly and the verifying server checks them 1:1.
+        SIGNALS_ENDPOINT: "http://192.168.1.40:4055"
         SIGNALS_PROJECT_ID: "proj_ios_device_cap"
+        # SPEC-174 on-device signing test: base64url of the 32-byte test secret.
+        SIGNALS_SIGNING_SECRET: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.facebook.WebDriverAgentRunner.xctrunner.2B8RPB7T5V
